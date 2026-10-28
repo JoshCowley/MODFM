@@ -2,3 +2,6 @@ build/
 .DS_Store
 __pycache__/
 *.fwsc
+
+# prebuilt prototype firmware is tracked
+!prebuilt/*.fwsc

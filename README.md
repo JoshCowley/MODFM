@@ -1,4 +1,45 @@
-# Felucca
+# MODFM — FM1 Rack firmware for the M-VAVE FM-1
+
+**FM1 Rack v1.7.0-rack2**: a fork of [Felucca](https://github.com/hugelton/Felucca) 1.7.0 that turns the FM-1 into a
+dedicated rack. Felucca's own engines are dropped; the sound is Mutable Instruments' module code (Emilie Gillet, MIT)
+under the rack's own names: **MACRO**, **MODEL**, **XMOD**, **GRAIN**, and per part two modulator slots (ENV, LFO,
+SLOPE, CYCLE, TRIG1..3). Everything else is Felucca's. Full notes: [FM1-RACK.md](FM1-RACK.md).
+
+> **Prototype status:** built for the FM-1 and host-tested. **Not yet run on an FM-1.** Flash at your own risk and keep
+> a way back (below).
+
+## Prototype quick start
+
+1. **Firmware:** [`prebuilt/fm1-rack-1.7.0-rack2.fwsc`](prebuilt/) (MD5 `0f794676f489eb97bb9d0d103acb07b5`).
+2. **Way back first:** have M-VAVE's updater / FM-1-transporter or the web installer's *Return to official V15* ready,
+   and the BSP's `fm1_rescue` for a unit that won't start.
+3. **Install:** connect the FM-1 by USB and install the `.fwsc` with Felucca's web installer (Chrome or Edge), as for
+   any Felucca build.
+4. **Bench checks:** work through [First things to check on the device](FM1-RACK.md#first-things-to-check-on-the-device)
+   (boot/splash, tuning, CPU load on the heavy MODEL models, GRAIN, XMOD, TRIG, 2ND CORE, project save/load).
+
+## Build from source
+
+```sh
+git clone https://github.com/JoshCowley/MODFM.git && cd MODFM
+git submodule update --init --recursive   # Felucca-Engines, felucca-bsp, pichenettes/eurorack (stmlib)
+./build.sh                                # needs the JieLi toolchain + AC79 SDK, see BUILDING.md
+```
+
+Without Docker: `JIELI_TOOLCHAIN=path AC79_SDK=path JIELI_DOCKER=0 ./build.sh`. `FELUCCA_RACK=0 ./build.sh` builds stock
+Felucca 1.7.0. The output lands in `build/`.
+
+## Licence
+
+GPL-3.0-only, as Felucca. Mutable Instruments code is MIT; Felucca-Engines MIT; felucca-bsp MPL-2.0. See
+[LICENSING.md](LICENSING.md), [LICENSES/](LICENSES/) and [CREDITS.md](CREDITS.md). Not affiliated with Hügelton,
+M-VAVE or Mutable Instruments.
+
+---
+
+*Upstream Felucca README follows.*
+
+## Felucca (upstream)
 
 [![License: GPL-3.0-only](https://img.shields.io/badge/license-GPL--3.0--only-blue.svg)](LICENSE)
 
