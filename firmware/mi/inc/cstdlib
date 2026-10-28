@@ -1,0 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+#pragma once
+static inline int abs(int x) { return x < 0 ? -x : x; }
+namespace std { using ::abs; }

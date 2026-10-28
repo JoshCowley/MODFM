@@ -7,23 +7,44 @@ typedef struct {
     uint32_t user, filter;
 } favorites_t;
 static favorites_t favorites __attribute__((section(".pool")));
+/* a factory preset's favourite bit: engine e's row, preset k's bit. Rows 14 and 15 hold the MIDI LEARN map and settings
+ * bytes (midi_learn.c, below), so FM1 Rack's BRAIDS (engine 14) keeps its bits in the second half of SLICE's row
+ * (bytes 16..31: SLICE's presets 128..255, which do not exist; saved with the settings as they are, and Felucca reads
+ * them as nothing). 0: none (no row, or a preset past it) */
+#define FAV_ENGINES 14u                                  /* (midi_learn.c: no engine of its own in row 14) */
+#if defined(FELUCCA_BRAIDS) && FELUCCA_BRAIDS
+#define FAV_BRAIDS 1
+#else
+#define FAV_BRAIDS 0                                     /* (also a host test that includes this file alone) */
+#endif
+static uint8_t *fav_byte(uint32_t engine, uint32_t preset)
+{
+    if (engine < FAV_ENGINES && preset < (FAV_BRAIDS && engine == 13u ? 128u : 256u))
+        return &favorites.factory[engine][preset / 8u];
+#if FAV_BRAIDS
+    if (engine == 14u && preset < 128u)
+        return &favorites.factory[13][16u + preset / 8u];
+#endif
+    return 0;
+}
 static int favorite_has(uint32_t engine, uint32_t preset)
 {
+    const uint8_t *b;
     if (engine == NENGINES)
         return preset < UP_SLOTS && ((favorites.user >> preset) & 1u);
-    return engine < NENGINES && engine < 16u && preset < 256u &&
-        ((favorites.factory[engine][preset / 8u] >> (preset % 8u)) & 1u);
+    b = engine < NENGINES ? fav_byte(engine, preset) : 0;
+    return b && ((*b >> (preset % 8u)) & 1u);
 }
 static int favorite_set(uint32_t engine, uint32_t preset, int on)
 {
-    if (engine > NENGINES || (engine == NENGINES ? preset >= UP_SLOTS : engine >= 16u || preset >= 256u))
+    uint8_t *b = engine < NENGINES ? fav_byte(engine, preset) : 0;
+    if (engine > NENGINES || (engine == NENGINES ? preset >= UP_SLOTS : !b))
         return 0;
     if (favorite_has(engine, preset) == !!on) return 0;
     if (engine == NENGINES) {
         if (on) favorites.user |= 1u << preset;
         else favorites.user &= ~(1u << preset);
     } else {
-        uint8_t *b = &favorites.factory[engine][preset / 8u];
         if (on) *b |= (uint8_t)(1u << (preset % 8u));
         else *b &= (uint8_t)~(1u << (preset % 8u));
     }

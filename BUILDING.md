@@ -18,7 +18,8 @@ with `--recurse-submodules`:
 git clone --recurse-submodules https://github.com/hugelton/Felucca.git
 ```
 
-In a clone made without it, run `git submodule update --init` once. GitHub's "Download ZIP" and the source archives
+In a clone made without it, run `git submodule update --init` once. FM1 Rack (`FM1-RACK.md`) adds a third,
+`ext/eurorack` (Mutable Instruments' code, with its own `stmlib` submodule): `git submodule update --init --recursive`. GitHub's "Download ZIP" and the source archives
 it adds to a release leave `firmware/engines/` and `firmware/bsp/` empty; each release also has
 `felucca-X.Y.Z-source.tar.gz`, the whole source with the submodules' files in it. The build stops with
 "firmware/engines is empty" or "firmware/bsp is empty" when they are missing.

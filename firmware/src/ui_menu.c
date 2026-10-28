@@ -66,6 +66,12 @@ static const menu_credit_t MENU_CREDITS[] = {
     {"Emilie Gillet / MIT", MC_TEXT},
     {"https://github.com/pichenettes/eurorack", MC_URL},
     {"", MC_TEXT},
+#if FELUCCA_BRAIDS
+    {"BRAIDS + PEAKS + GRIDS (FM1 RACK)", MC_TITLE},
+    {"Emilie Gillet / MIT (Braids, Peaks), GPL-3.0 (Grids)", MC_TEXT},
+    {"https://github.com/pichenettes/eurorack", MC_URL},
+    {"", MC_TEXT},
+#endif
     {"INTER TIGHT", MC_TITLE},
     {"The Inter Project Authors", MC_TEXT},
     {"SIL Open Font License 1.1", MC_TEXT},

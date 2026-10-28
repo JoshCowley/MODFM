@@ -16,6 +16,14 @@
 #ifndef FELUCCA_SLICE
 #define FELUCCA_SLICE 1          /* the SLICE engine (eng_slice.c), engine 13; FELUCCA_SLICE=0 builds without it */
 #endif
+#ifndef FELUCCA_BRAIDS
+#define FELUCCA_BRAIDS 0         /* FM1 Rack: the BRAIDS engine (eng_braids.c, Mutable Instruments' Braids and Peaks,
+                                  * mi/mi_glue.cc), engine 14. Needs the C++ objects tools/build.py links (it builds
+                                  * with FELUCCA_BRAIDS=1 by default); 0 here keeps the host tests as Felucca's */
+#endif
+#if FELUCCA_BRAIDS && !FELUCCA_SLICE
+#error "FELUCCA_BRAIDS: engine 14 follows SLICE (13); build with FELUCCA_SLICE=1"
+#endif
 #ifndef FELUCCA_FM4
 #define FELUCCA_FM4 0            /* the DIGITAL engine (eng_digital.c, four-operator FM): kept in the tree, not built
                                   * by default; replaced by FM6, its sounds convert (fm4_convert.c) */
@@ -28,7 +36,8 @@
                                             * second core (mod.c, voice.c SPREAD, eng_formant.c): one each with two cores,
                                             * one for all with one, as up to 1.6 */
 #define C1_PI(t) ((uint32_t)((t) - trk) % C1_NP)   /* a part's copy */
-#define NENGINES (13 + FELUCCA_SLICE)   /* SLICE (13) comes last: the other engines keep their numbers */
+#define NENGINES (13 + FELUCCA_SLICE + FELUCCA_BRAIDS)   /* SLICE (13), then BRAIDS (14, FM1 Rack): the others keep
+                                                         * their numbers */
 #define ENGI_DIGITAL 1u          /* reserved without FELUCCA_FM4: never selectable (eng_ok), its sounds load as FM6 */
 #define NENG_SHOWN (NENGINES - !FELUCCA_FM4)   /* the engines one can pick: PRESETS, the EDIT layer, the editor,
                                                 * in the display order of engines.c ENGINE_ORDER */

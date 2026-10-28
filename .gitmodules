@@ -6,3 +6,6 @@
 [submodule "firmware/bsp"]
 	path = firmware/bsp
 	url = https://github.com/hugelton/felucca-bsp.git
+[submodule "ext/eurorack"]
+	path = ext/eurorack
+	url = https://github.com/pichenettes/eurorack

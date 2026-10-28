@@ -377,6 +377,7 @@ static volatile uint32_t beat_pos, beat_n;      /* samples into the beat, the be
  * never counts in (its Start starts). STOP (seq_stop) cancels it. */
 #define CLK_START 0xFFFFFFFFu
 static uint32_t clk_pos = CLK_START, clk_step;  /* samples into the 1/16 step, the step of the bar (0..15) */
+static uint32_t clk_count;                      /* FM1 Rack: the 1/16 steps since the transport started */
 static volatile uint8_t cin_left, cin_total;    /* the count-in's beats still to come (0: none), of how many */
 static volatile uint32_t cin_pos;               /* samples into its beat playing */
 static uint8_t cin_flush;                       /* the count-in ended in this block: record what was kept */
@@ -1319,12 +1320,14 @@ static void click_tick(uint32_t adv)
     if (clk_pos == CLK_START) {
         clk_pos = 0;
         clk_step = 0;
+        clk_count = 0;
         beat = 2;
     } else {
         clk_pos += adv;
         while (clk_pos >= p) {                      /* (as seq_tick: the remainder kept) */
             clk_pos -= p;
             clk_step = (clk_step + 1u) & 15u;
+            clk_count++;
             if (!(clk_step & 3u))
                 beat = clk_step ? 1u : 2u;
         }
@@ -1335,6 +1338,14 @@ static void click_tick(uint32_t adv)
 /* the beat of the bar the click is on (0..3: 0 the accented first), -1 stopped: the count-in's, else the playing
  * transport's (clk_step, internal or external clock). It moves in the block a beat clicks in (the header's metronome,
  * ui_draw.c, swings on it; CLICK OFF it moves all the same) */
+/* FM1 Rack: the transport's 1/16 count since it started (internal or external clock), -1 while stopped: the BRAIDS
+ * engine's GRID modulator steps through Grids' 32 steps on it (eng_braids.c) */
+static __attribute__((unused)) int32_t seq_clock16(void)
+{
+    if (!song.playing || clk_pos == CLK_START)
+        return -1;
+    return (int32_t)(clk_count & 0x7FFFFFFFu);
+}
 static int32_t click_beat_now(void)
 {
     if (cin_left)

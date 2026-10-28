@@ -40,6 +40,9 @@ static uint8_t eng_mem_owner[NPART];       /* engine index + 1 whose state is in
 #if FELUCCA_SLICE
 #include "eng_slice.c"
 #endif
+#if FELUCCA_BRAIDS
+#include "eng_braids.c"         /* FM1 Rack: BRAIDS (Braids, Peaks, Grids: mi/mi_glue.cc) */
+#endif
 
 /* the editor protocol, user presets and projects store these indices: append, never reorder */
 static const engine_t *const ENGINES[NENGINES] = {
@@ -62,6 +65,9 @@ static const engine_t *const ENGINES[NENGINES] = {
     &ENG_FM6,                    /* 12 (ENGI_FM6) */
 #if FELUCCA_SLICE
     &ENG_SLICE,                  /* 13 (FELUCCA_SLICE=0 builds without it) */
+#endif
+#if FELUCCA_BRAIDS
+    &ENG_BRAIDS,                 /* 14 (FM1 Rack) */
 #endif
 };
 
@@ -118,6 +124,9 @@ static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
     1,                           /* DIGITAL */
 #endif
     2, 3, 4, 5, 6, 7, 8, 9,      /* PHASE LOFI SAMPLE VOICE TRIO WHEEL GRAIN PHYS */
+#if FELUCCA_BRAIDS
+    14,                          /* BRAIDS (FM1 Rack) */
+#endif
     11,                          /* NOISE */
 #if FELUCCA_SLICE
     13,                          /* SLICE */

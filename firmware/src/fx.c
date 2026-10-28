@@ -2,7 +2,12 @@
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* Effects: per-track DIST and INSERT (1.5), then sends into three
  * shared buses (chorus, tempo delay, reverb). Mono buses, stereo dry mix. */
-#define DLY_LEN 65536u           /* 1.49 s: 1/4 fits from 41 BPM, 1/4D from 61, 1/2 from 81 */
+#ifndef FELUCCA_DLY_LEN
+#define FELUCCA_DLY_LEN (FELUCCA_BRAIDS ? 32768u : 65536u)   /* FM1 Rack: half the line with BRAIDS (its four
+                                                              * oscillators need the pool's 64 KB: 0.74 s) */
+#endif
+#define DLY_LEN ((uint32_t)FELUCCA_DLY_LEN)   /* 65536: 1.49 s: 1/4 fits from 41 BPM, 1/4D from 61, 1/2 from 81 */
+_Static_assert((DLY_LEN & (DLY_LEN - 1u)) == 0u && DLY_LEN >= 4096u, "DLY_LEN: a power of two (the read mask)");
 #define CHO_LEN 2048u
 static int16_t dly_buf[DLY_LEN] __attribute__((section(".pool")));
 static int16_t cho_buf[CHO_LEN] __attribute__((section(".pool")));
@@ -868,7 +873,12 @@ static uint16_t part_cost[NTRK];                        /* the last block's, per
 static const uint16_t ENG_VCOST[NENGINES] = {163, FELUCCA_FM4 ? 181 : 0, 162, 67, 70, 174, 144, 143, 189, 309, 113, 134,
                                              181,
 #if FELUCCA_SLICE
-                                             129
+                                             129,
+#endif
+#if FELUCCA_BRAIDS
+                                             /* BRAIDS (FM1 Rack): ANALOG's x 2 for most models, x 3 for HARM (host ns,
+                                              * tests/braids_test.c's models; no instruction counts on Linux): the middle */
+                                             330,
 #endif
 };
 #endif

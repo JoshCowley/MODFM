@@ -47,6 +47,21 @@ You may use, study, change and share Felucca under the GPL. If you distribute Fe
 firmware derived from it, you must also give your recipients its complete corresponding
 source under the same licence. That includes devices that ship with modified Felucca inside.
 
+## FM1 Rack (this fork)
+
+FM1 Rack adds the BRAIDS engine to Felucca 1.7.0 (`FM1-RACK.md`). Its own files are GPL-3.0-only like Felucca's:
+`firmware/src/eng_braids.c`, `firmware/mi/` (the C++ glue and the freestanding headers), `tools/mi_build.py`,
+`tools/mi_trim.py`, `tools/build_mi_host.sh`, `tests/braids_test.c`, and its changes to Felucca's files.
+
+| What | Licence | Where |
+| --- | --- | --- |
+| Braids (macro oscillator) and Peaks (envelope, LFO) by Emilie Gillet, from pichenettes/eurorack, compiled from the submodule `ext/eurorack` (with `tools/mi_build.py`'s build-time patches: per-object random numbers, the wavetable models silenced, the resource tables cut) | MIT | `ext/eurorack/`, `LICENSES/MIT-Braids-Peaks.txt` |
+| Grids' drum map by Emilie Gillet (the 25 nodes and their 5 x 5 map) | GPL-3.0 | `firmware/src/grids_map.h` |
+
+The MENU's CREDITS list them. "Mutable Instruments" is a registered trademark: the eurorack guidelines ask derivative
+works not to use the name or the module names, so BRAIDS and its modulators keep those names only while FM1 Rack
+stays private.
+
 ## Hügelton Instruments' own work
 
 All by Hügelton Instruments (Leo Kuroshita), in this tree:

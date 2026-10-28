@@ -33,6 +33,7 @@ LDR = OUT / "loader"
 sys.path.insert(0, str(SRC / "tools"))
 import fm1pkg_make  # noqa: E402
 import lz4blk  # noqa: E402
+import mi_build  # noqa: E402
 
 APP_XIP = 0x02000120                # app.bin offset 0 in the XIP map; the SPL jumps here
 APP_SLOT = fm1pkg_make.APP_SLOT
@@ -55,6 +56,12 @@ VERSION = None                      # FELUCCA_VERSION for release builds (defaul
 # stacks (firmware/bsp/chip/fm1_cpu1.S) linked and its waiting loop (.c1_text) checked; MENU > SYSTEM > 2ND CORE starts it
 # (OFF by default: one core, as 1.6). FELUCCA_CPU2=0: none of it is built (1.6's one-core code and RAM)
 CPU2 = os.environ.get("FELUCCA_CPU2") != "0"
+# FM1 Rack: FELUCCA_BRAIDS, unset or 1, the default of this fork: the BRAIDS engine (firmware/src/eng_braids.c) and
+# the Mutable Instruments objects it calls (tools/mi_build.py), linked with the app. With it, unless set:
+# FELUCCA_UAC_48K=0 (USB audio at 44.1 kHz only: its 48 kHz filter's 8 KB of flash go to Braids) and the version
+# string v1.7.0-rack1. FELUCCA_BRAIDS=0: Felucca 1.7.0 as it was (the same image but for the build date)
+BRAIDS = os.environ.get("FELUCCA_BRAIDS") != "0"
+RACK_VERSION = "v1.7.0-rack1"
 
 
 def toolchain():
@@ -208,12 +215,16 @@ def build_app():
         v = os.environ.get(flag)    # unset: the default in firmware/src/felucca.c
         if v in ("0", "1"):
             flags.append(f"-D{flag}={v}")
+        elif flag == "FELUCCA_UAC_48K" and BRAIDS:
+            flags.append("-DFELUCCA_UAC_48K=0")    # FM1 Rack: its flash to BRAIDS (above)
+    if BRAIDS:
+        flags.append("-DFELUCCA_BRAIDS=1")
     v = os.environ.get("FELUCCA_USB_LAYOUT")   # firmware/src/usb.c: how the USB composite presents itself (#67), 0..3
     if v in ("0", "1", "2", "3"):
         flags.append(f"-DFELUCCA_USB_LAYOUT={v}")
     flags.append(f'-DFELUCCA_ID="{PRODUCT}"')
-    if VERSION:
-        flags.append(f'-DFELUCCA_VERSION="{VERSION}"')
+    if VERSION or BRAIDS:
+        flags.append(f'-DFELUCCA_VERSION="{VERSION or RACK_VERSION}"')
     # felucca.c goes to LLVM IR without the optimizer, the main-loop functions (UI, stores, editor) are
     # marked minsize (tools/size_fns.py), then the IR is compiled at -Os. FELUCCA_SIZE=0: -Os everywhere
     size = os.environ.get("FELUCCA_SIZE") != "0"
@@ -231,9 +242,13 @@ def build_app():
                        check=True)
         tc("cc", *[f for f in flags if not f.startswith(("-I", "-D", "-W"))], "-c",
            OUT / "felucca_size.ll", "-o", OUT / "felucca.o")
+    mi_objs = []
+    if BRAIDS:                      # FM1 Rack: Braids and Peaks (C++), freestanding, for pi32v2
+        mi_objs = [Path(o) for o in mi_build.build(lambda a: tc("cc", *a), lambda a: tc("common/bin/objdump", *a),
+                                                   OUT / "mi", freestanding=True, rel=True)]
     elf = OUT / "felucca.elf"
     tc("pi32v2/bin/ld", "-T", FW / "app.ld", OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o",
-       *([OUT / "fm1_cpu1.o"] if CPU2 else []), OUT / "felucca.o", "-o", elf)
+       *([OUT / "fm1_cpu1.o"] if CPU2 else []), OUT / "felucca.o", *mi_objs, "-o", elf)
     for sect in ("text.bin", "data.bin", "ramtext.bin", "c1text.bin"):   # (c1text.bin: before the BSP, its own section)
         (OUT / sect).unlink(missing_ok=True)
     *_, syms, dis, rt = tc_all(("common/bin/objcopy", "-O", "binary", "-j", ".text", elf, OUT / "text.bin"),
@@ -318,7 +333,11 @@ def check(img, syms, dis, rt):
             if 0xFFC00000 <= val < 0xFFD00000:
                 errors.append(f"reference to ROM address {val:#010x}")
     if len(img) > APP_SLOT:
-        errors.append(f"image {len(img)} B exceeds the app slot")
+        errors.append(f"image {len(img)} B exceeds the app slot ({APP_SLOT} B) by {len(img) - APP_SLOT} B" +
+                      (": FM1 Rack levers: FELUCCA_ICONS=0 (the parameter icons), or fewer Braids models "
+                       "(tools/mi_build.py SILENCED with eng_braids.c BRD_SHAPE)" if BRAIDS else ""))
+    else:
+        notes.append(f"flash: {APP_SLOT - len(img)} B of the app slot free")
 
     def sym(name):
         mm = re.search(r"^([0-9a-f]+) .*\s" + name + r"$", syms, re.M)

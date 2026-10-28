@@ -1,0 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+#pragma once
+#include "string.h"
+namespace std { using ::memset; using ::memcpy; using ::memcmp; }

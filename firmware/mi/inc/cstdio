@@ -1,0 +1,3 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+#pragma once
+/* (nothing: the modules include it for printf in their tests only) */
