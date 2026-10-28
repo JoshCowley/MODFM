@@ -219,7 +219,11 @@ static uint32_t param_icon(const param_desc_t *d, int32_t v)
 static uint32_t mod_src_icon(int32_t s)
 {
     static const uint8_t I[MS_N] = {ICON_MOD, ICON_LFO_WAVE, ICON_ENV, ICON_ACCENT, ICON_KEYTRACK, ICON_PROB,
-                                    ICON_MOD, ICON_MIDI, ICON_LEVEL, ICON_W_SH, ICON_GLIDE};
+                                    ICON_MOD, ICON_MIDI, ICON_LEVEL, ICON_W_SH, ICON_GLIDE,
+#if FELUCCA_RACK
+                                    ICON_LFO_WAVE, ICON_LFO_WAVE,                /* (FM1 Rack: MODA MODB) */
+#endif
+    };
     return I[clamp(s, 0, MS_N - 1)];
 }
 static uint32_t mod_dst_icon(const track_t *t, int32_t d)
@@ -254,7 +258,8 @@ static uint32_t engine_icon(const char *name)
         {"DRUM", ICON_DRUM},
         {"NOISE", ICON_NOISE},
         {"FM6", ICON_MOD},                    /* (symbol_modular: six operators patched; a glyph of its own wanted) */
-        {"BRAIDS", ICON_W_SAW},               /* FM1 Rack: a macro oscillator (a glyph of its own wanted) */
+        {"MACRO", ICON_W_SAW},                /* FM1 Rack: the macro oscillators (a glyph of their own wanted) */
+        {"MODEL", ICON_W_SAW},
     };
     uint32_t i;
     for (i = 0; i < sizeof M / sizeof M[0]; i++)

@@ -3,14 +3,15 @@
 /* Effects: per-track DIST and INSERT (1.5), then sends into three
  * shared buses (chorus, tempo delay, reverb). Mono buses, stereo dry mix. */
 #ifndef FELUCCA_DLY_LEN
-#define FELUCCA_DLY_LEN (FELUCCA_BRAIDS ? 32768u : 65536u)   /* FM1 Rack: half the line with BRAIDS (its four
-                                                              * oscillators need the pool's 64 KB: 0.74 s) */
+#define FELUCCA_DLY_LEN (FELUCCA_RACK ? 16384u : 65536u)   /* FM1 Rack: a quarter of the line (0.37 s): the
+                                                              * rack's engines and GRAIN need the pool */
 #endif
 #define DLY_LEN ((uint32_t)FELUCCA_DLY_LEN)   /* 65536: 1.49 s: 1/4 fits from 41 BPM, 1/4D from 61, 1/2 from 81 */
 _Static_assert((DLY_LEN & (DLY_LEN - 1u)) == 0u && DLY_LEN >= 4096u, "DLY_LEN: a power of two (the read mask)");
 #define CHO_LEN 2048u
 static int16_t dly_buf[DLY_LEN] __attribute__((section(".pool")));
 static int16_t cho_buf[CHO_LEN] __attribute__((section(".pool")));
+#if !FELUCCA_RACK   /* (FM1 Rack: GRAIN is the third bus, the reverb is gone) */
 static const uint16_t REV_COMB[4] = {1116, 1188, 1277, 1356};
 static const uint16_t REV_AP[2] = {556, 441};
 static int16_t rev_comb[1116 + 1188 + 1277 + 1356] __attribute__((section(".pool")));
@@ -19,6 +20,7 @@ static union {                          /* ROOM's allpasses; SPRING's allpass ch
     int32_t sp[(556 + 441) / 2];
 } rev_u __attribute__((section(".pool")));
 #define rev_ap (rev_u.ap)
+#endif
 static struct {
     uint32_t dly_w, cho_w, cho_ph;
     int32_t dly_lp;
@@ -31,6 +33,7 @@ static struct {
     uint32_t sp_ph;                      /* .. the output tap's wobble */
 } fx;
 
+#if !FELUCCA_RACK   /* (FM1 Rack: GRAIN is the third bus, the reverb is gone) */
 /* SPRING (G_RTYPE 1): one spring of a spring tank, mono like the other buses, in the ROOM's own buffers (no
  * RAM of its own): the input and the loop's return -> a low cut (~110 Hz: a spring carries little bass) ->
  * SP_N stretched first-order allpasses, (a + z^-4) / (1 + a z^-4) (after Valimaki, Parker and Abel: below
@@ -93,6 +96,9 @@ static struct {                          /* HALL's state (in the pool: no .bss) 
     int16_t y[HL_NL][HL_NC];             /* the lines' ends, then what goes back into them */
 } hl __attribute__((section(".pool")));
 #define rev_side (hl.sd)
+#else
+static const struct { uint8_t side; } hl;     /* (never set: no stereo reverb) */
+#endif
 
 /* DIST: low cut -> drive (1x..8x, exponential) -> asymmetric soft clip
  * (a little bias = even harmonics) -> tone low-pass that closes with drive ->
@@ -245,6 +251,7 @@ static uint32_t delay_samples(void)
     return s < 16u ? 16u : s >= DLY_LEN ? DLY_LEN - 1u : s;
 }
 
+#if !FELUCCA_RACK   /* (FM1 Rack: GRAIN is the third bus, the reverb is gone) */
 /* ROOM (G_RTYPE 0): 4 damped combs + 2 allpasses (Freeverb-like, mono), added to out */
 static __attribute__((noinline)) void rev_room(const int32_t *rev_in, int32_t *out, uint32_t n)
 {
@@ -509,6 +516,7 @@ static void rev_clear(void)
     fx.sp_lp = fx.sp_hp = fx.sp_he = 0;
     hl.x = hl.m = hl.s = hl.hp = hl.he = 0;
 }
+#endif
 
 #if FELUCCA_CPU2
 /* the dry mix and the sends, as each core adds its parts into them (after Jangada: mx[1] is the second core's,
@@ -538,6 +546,7 @@ static int32_t part_buf[CTL];                            /* a part's block (mix_
 #define SM1_b part_buf
 #endif
 
+#if !FELUCCA_RACK   /* (FM1 Rack: GRAIN is the third bus, the reverb is gone) */
 /* the model changed (to rt): the old one's block fades out (HALL's stereo difference with it), its buffers are
  * cleared, the new one starts from silence */
 static __attribute__((noinline)) void rev_switch(const int32_t *rev_in, int32_t *wet, uint32_t n, int32_t rt)
@@ -559,6 +568,38 @@ static __attribute__((noinline)) void rev_switch(const int32_t *rev_in, int32_t 
     rev_clear();
     fx.rtype = (uint8_t)rt;
 }
+#endif
+
+#if FELUCCA_RACK
+/* GRAIN (FM1 Rack): the third bus, where the reverb was: Clouds' granular processor (Mutable Instruments, MIT;
+ * mi_glue_fp.cc), mono, low fidelity (its 8-bit buffer: 1.5 s), on the tracks' REV sends. Its values are the reverb's
+ * and the inert globals' ids (stored with the project as they were; params.c GP): MODE (G_RTYPE: GRAN STRCH LOOP, FRZ
+ * = GRAN frozen), POS (G_DRLVL), SIZE (G_RSIZE), PTCH (G_MIDI, -24 .. +24 semitones), DENS (G_DRREV), TEXT (G_RDAMP),
+ * FDBK (G_ENGGO), VERB (G_SYNC: Clouds' own reverb). The return is wet only, at the send's level */
+static __attribute__((noinline)) void grain_bus(const int32_t *rev_in, int32_t *wet, uint32_t n)
+{
+    int32_t in[CTL], o[CTL];
+    uint32_t i, md = (uint32_t)clamp(song.g[G_RTYPE], 0, 3);
+    mi_grain_t q;
+    if (n > CTL)
+        n = CTL;
+    q.mode = (uint8_t)(md == 3u ? 0u : md);
+    q.freeze = md == 3u;
+    q.position = (uint16_t)(clamp(song.g[G_DRLVL], 0, 127) * 258);
+    q.size = (uint16_t)(clamp(song.g[G_RSIZE], 0, 127) * 258);
+    q.pitch = (int16_t)(clamp(song.g[G_MIDI], -24, 24) * 1365);
+    q.density = (uint16_t)(clamp(song.g[G_DRREV], 0, 127) * 258);
+    q.texture = (uint16_t)(clamp(song.g[G_RDAMP], 0, 127) * 258);
+    q.feedback = (uint16_t)(clamp(song.g[G_ENGGO], 0, 127) * 258);
+    q.reverb = (uint16_t)(clamp(song.g[G_SYNC], 0, 127) * 258);
+    q.spread = 0;
+    for (i = 0; i < n; i++)
+        in[i] = rev_in[i] >> 2;                         /* a send's full scale is a voice's x 4 (ROOM's 1/8 at -4 dB) */
+    mi_grain_block(&q, in, o, n);
+    for (i = 0; i < n; i++)
+        wet[i] += o[i] << 2;                            /* (back to the mix's scale: x 4) */
+}
+#endif
 
 /* process the three buses for one block; sends in, wet stereo-equal out */
 static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t *rev_in, int32_t *wet,
@@ -594,6 +635,10 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t
         y += mulq15(x << 1, dmix);
         wet[i] = y;
     }
+#if FELUCCA_RACK
+    (void)rt;
+    grain_bus(rev_in, wet, n);
+#else
     rt = song.g[G_RTYPE];
     rt = rt == 1 || rt == 2 ? rt : 0;
     hl.side = 0;
@@ -605,8 +650,10 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t
         rev_spring(rev_in, wet, n);
     else
         rev_room(rev_in, wet, n);
+#endif
 }
 
+#if !FELUCCA_RACK   /* (FM1 Rack: GRAIN is the third bus, the reverb is gone) */
 /* after the buses: HALL's stereo difference to the left and from the right of the dry mix (the wet bus adds the
  * same to both) */
 static __attribute__((noinline)) void rev_side_mix(int32_t *l, int32_t *r, uint32_t n)
@@ -617,6 +664,9 @@ static __attribute__((noinline)) void rev_side_mix(int32_t *l, int32_t *r, uint3
         r[i] -= rev_side[i];
     }
 }
+#else
+static void rev_side_mix(int32_t *l, int32_t *r, uint32_t n) { (void)l; (void)r; (void)n; }
+#endif
 
 /* INSERT (1.5, Discussions #78 and #177): one effect per track, after DIST and before the SLICER, with a dry / wet
  * MIX. TYPE (P_ITYPE, N_ITYPE; stored, append-only) and its three values A B C (P_IA .. P_IC, what they mean: params.c
@@ -641,7 +691,15 @@ static __attribute__((noinline)) void rev_side_mix(int32_t *l, int32_t *r, uint3
  * recordings) comes after, so its edges stay sharp (no flanger feedback or phaser ringing smears them) and a STUT
  * repeats the processed sound. State in the pool, per track (ins[], 580 B each); noinline, its own loops: the audio
  * ISR's inlined path gains one test per part (track_t ins_run) */
+#if FELUCCA_RACK
+/* FM1 Rack: XMOD (9), Warps' cross-modulation (Mutable Instruments, MIT; mi_glue_fp.cc): the track's sound is the
+ * modulator, a Warps oscillator at the part's last note the carrier. ALGO morphs XFADE FOLD ARING DRING XOR COMP
+ * (Warps' ALGO knob), TIMB is their parameter, CARR the carrier (SIN TRI SAW PLS, SIN +5 +7 +12 -12 semitones).
+ * Float code: the first core only (rack_core0) */
+enum { IT_OFF, IT_SOFT, IT_HARD, IT_FOLD, IT_FUZZ, IT_CRUSH, IT_PHASER, IT_FLANGER, IT_CHORUS, IT_XMOD, IT_N };
+#else
 enum { IT_OFF, IT_SOFT, IT_HARD, IT_FOLD, IT_FUZZ, IT_CRUSH, IT_PHASER, IT_FLANGER, IT_CHORUS, IT_N };
+#endif
 #define IL_LEN 256u                     /* FLANG / CHOR: the line, samples (a power of 2: masked) */
 static const uint8_t INS_HOLD[16] = {64, 48, 40, 32, 24, 20, 16, 12, 10, 8, 6, 5, 4, 3, 2, 1};   /* CRUSH RATE */
 typedef struct {
@@ -779,6 +837,24 @@ static __attribute__((noinline)) void ins_swept(ins_t *s, const track_t *t, int3
     }
 }
 
+#if FELUCCA_RACK
+/* XMOD: Warps' cross-modulation of the block by the track's carrier, blended by MIX */
+static __attribute__((noinline)) void ins_xmod(ins_t *s, track_t *t, int32_t *b, uint32_t n, int32_t tw)
+{
+    int32_t y[CTL];
+    uint32_t i, k = (uint32_t)(t - trk) % NTRK;
+    if (n > CTL)
+        n = CTL;
+    for (i = 0; i < n; i++)
+        y[i] = b[i];
+    mi_xmod_block(k, y, n, rack_mod_lastnote(t), t->p[P_IA] * 258, t->p[P_IB] * 258, (uint32_t)t->p[P_IC] & 7u);
+    for (i = 0; i < n; i++) {
+        s->w += clamp(tw - s->w, -SL_SLOPE, SL_SLOPE);
+        b[i] = pf_mix(b[i], y[i], s->w);
+    }
+}
+#endif
+
 /* the INSERT at rest at once (mix_part: TYPE turned OFF while the part was silent, its fade never ran) */
 static __attribute__((noinline)) void ins_rest(track_t *t)
 {
@@ -801,7 +877,16 @@ static __attribute__((noinline)) void track_insert(track_t *t, int32_t *b, uint3
         }
         memset(s, 0, sizeof *s);                        /* starting: no stale line or filter */
         s->type = (uint8_t)ty;
+#if FELUCCA_RACK
+        if (ty == IT_XMOD)
+            mi_xmod_init((uint32_t)(t - trk) % NTRK);
+#endif
     }
+#if FELUCCA_RACK
+    if (s->type == IT_XMOD)
+        ins_xmod(s, t, b, n, tw);
+    else
+#endif
     if (s->type >= IT_PHASER)
         ins_swept(s, t, b, n, tw);
     else
@@ -870,17 +955,18 @@ static __attribute__((noinline)) void mix_spread(track_t *t, int32_t *b, uint32_
  * when built, nothing when retired. An estimate: it only steers the split, the sound does not depend on it */
 #if FELUCCA_CPU2
 static uint16_t part_cost[NTRK];                        /* the last block's, per part */
+#if FELUCCA_RACK
+/* FM1 Rack: MACRO ANALOG's x 2 for most models, x 3 for HARM (host ns, tests/rack_test.c; no instruction counts on
+ * Linux): the middle; MODEL never goes to the second core (rack_core0): its cost only weighs the split of the others */
+static const uint16_t ENG_VCOST[NENGINES] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 330, 900};
+#else
 static const uint16_t ENG_VCOST[NENGINES] = {163, FELUCCA_FM4 ? 181 : 0, 162, 67, 70, 174, 144, 143, 189, 309, 113, 134,
                                              181,
 #if FELUCCA_SLICE
                                              129,
 #endif
-#if FELUCCA_BRAIDS
-                                             /* BRAIDS (FM1 Rack): ANALOG's x 2 for most models, x 3 for HARM (host ns,
-                                              * tests/braids_test.c's models; no instruction counts on Linux): the middle */
-                                             330,
-#endif
 };
+#endif
 #endif
 
 /* one synth part into the dry mix and the sends of sm (mx[0]; mx[1] on the second core); a part with no voice sounding costs
@@ -891,6 +977,9 @@ static void mix_part(track_t *t, uint32_t n SM_DECL)
     uint32_t i;
 #if FELUCCA_CPU2
     uint32_t nr;
+#endif
+#if FELUCCA_RACK
+    rack_mod_block(t);                                  /* FM1 Rack: MOD A, MOD B, before the matrix reads them */
 #endif
     mod_begin(t);                                       /* the matrix's per-block values into t->p (mod.c) */
     T_SPREAD(t) = t->p[P_SPRD] > 0 && (trk_vmode(t) == V_POLY || trk_vmode(t) == V_UNISON);   /* (SPREAD, mix_spread) */
@@ -1039,6 +1128,21 @@ static uint32_t mix_split(void)
 }
 #endif
 
+#if FELUCCA_RACK
+/* FM1 Rack: the parts that render on the first core only: a MODEL part (Plaits) and one with XMOD (Warps): their
+ * float code and stmlib's one random-number generator (mi_glue_fp.cc), and Plaits' stack, which the second core's
+ * 2.8 KB would not hold. (A part on the second core costs the first nothing: the split leaves these here) */
+static uint32_t rack_core0(void)
+{
+    uint32_t i, m = 0;
+    for (i = 0; i < NPART; i++)
+        if (eng_idx(trk[i].engine) == ENGI_MODEL || eng_idx(trk[i].eng_req) == ENGI_MODEL ||
+            trk[i].p[P_ITYPE] == IT_XMOD || ins[i].type == IT_XMOD)
+            m |= 1u << i;
+    return m;
+}
+#endif
+
 static void mix_block(int32_t *out, uint32_t n)
 {
     uint32_t i;
@@ -1050,6 +1154,9 @@ static void mix_block(int32_t *out, uint32_t n)
     perf = perf_begin(n);                               /* the FX hold layer at work (perform.c) */
 #if FELUCCA_CPU2
     uint32_t m = C1_ON() ? C1_SPLIT() & ((1u << NPART) - 1u) : 0u;
+#if FELUCCA_RACK
+    m &= ~rack_core0();
+#endif
     if (m && !C1_RUN(c1_parts, m | n << 8))
         m = 0;
     c1_blocks += m != 0;

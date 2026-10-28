@@ -13,16 +13,16 @@
 #define NTRK NPART               /* tracks (the formats and the protocol count these): every track is a part */
 #define NSTEP 64
 #define HALF_FRAMES 128          /* I2S half buffer: 2.9 ms at 44.1 kHz (a key waits 0..1 half, then plays 1 half later) */
+#ifndef FELUCCA_RACK
+#define FELUCCA_RACK 0           /* FM1 Rack: the dedicated rack build. Felucca's thirteen engines are dropped (their table
+                                  * slots stay, silent and never offered, so the stored engine numbers keep their places);
+                                  * the rack's engines are 14 MACRO and 15 MODEL (eng_macro.c, eng_model.c: Mutable
+                                  * Instruments' Braids and Plaits through mi/mi_glue.cc), the rest of Felucca (sequencer,
+                                  * FX, matrix, UI, storage, USB) as it is. tools/build.py builds with FELUCCA_RACK=1 by
+                                  * default; 0 here keeps Felucca's host tests as they were */
+#endif
 #ifndef FELUCCA_SLICE
-#define FELUCCA_SLICE 1          /* the SLICE engine (eng_slice.c), engine 13; FELUCCA_SLICE=0 builds without it */
-#endif
-#ifndef FELUCCA_BRAIDS
-#define FELUCCA_BRAIDS 0         /* FM1 Rack: the BRAIDS engine (eng_braids.c, Mutable Instruments' Braids and Peaks,
-                                  * mi/mi_glue.cc), engine 14. Needs the C++ objects tools/build.py links (it builds
-                                  * with FELUCCA_BRAIDS=1 by default); 0 here keeps the host tests as Felucca's */
-#endif
-#if FELUCCA_BRAIDS && !FELUCCA_SLICE
-#error "FELUCCA_BRAIDS: engine 14 follows SLICE (13); build with FELUCCA_SLICE=1"
+#define FELUCCA_SLICE (!FELUCCA_RACK)   /* the SLICE engine (eng_slice.c), engine 13; FELUCCA_SLICE=0 builds without it */
 #endif
 #ifndef FELUCCA_FM4
 #define FELUCCA_FM4 0            /* the DIGITAL engine (eng_digital.c, four-operator FM): kept in the tree, not built
@@ -36,11 +36,16 @@
                                             * second core (mod.c, voice.c SPREAD, eng_formant.c): one each with two cores,
                                             * one for all with one, as up to 1.6 */
 #define C1_PI(t) ((uint32_t)((t) - trk) % C1_NP)   /* a part's copy */
-#define NENGINES (13 + FELUCCA_SLICE + FELUCCA_BRAIDS)   /* SLICE (13), then BRAIDS (14, FM1 Rack): the others keep
-                                                         * their numbers */
+#define NENGINES (FELUCCA_RACK ? 16 : 13 + FELUCCA_SLICE)   /* SLICE (13); FM1 Rack: MACRO (14), MODEL (15) */
 #define ENGI_DIGITAL 1u          /* reserved without FELUCCA_FM4: never selectable (eng_ok), its sounds load as FM6 */
+#if FELUCCA_RACK
+#define NENG_SHOWN 2             /* FM1 Rack: MACRO, MODEL (engines.c ENGINE_ORDER) */
+#else
 #define NENG_SHOWN (NENGINES - !FELUCCA_FM4)   /* the engines one can pick: PRESETS, the EDIT layer, the editor,
                                                 * in the display order of engines.c ENGINE_ORDER */
+#endif
+#define ENGI_MACRO 14u           /* FM1 Rack */
+#define ENGI_MODEL 15u
 #define UP_SLOTS 32u             /* user presets (upreset.c) */
 
 /* ------------------------------------------------------- parameters --- */
@@ -78,6 +83,11 @@ enum {                          /* per-track parameters */
     P_ITYPE, P_IA, P_IB, P_IC, P_IMIX,         /* 1.5 (#78, #177): the INSERT, its TYPE, three values and MIX (fx.c) */
     P_FTYPE,                                   /* 1.5 (#104): ANALOG's filter TYPE, LP (as before) / BP / HP (eng_analog.c) */
     P_ESYNC,                                   /* 1.5 (#175): ENV SYNC: ATK DEC REL as note values of the tempo (voice.c) */
+#if FELUCCA_RACK
+    P_MATYP, P_MA1, P_MA2, P_MA3, P_MA4,       /* FM1 Rack: MOD A, its TYPE and four values (rack_mod.c) */
+    P_MBTYP, P_MB1, P_MB2, P_MB3, P_MB4,       /* .. MOD B */
+    P_RK0, P_RK1, P_RK2, P_RK3, P_RK4, P_RK5,  /* reserved for the rack (0; track_t stays a multiple of 16 bytes) */
+#endif
     P_E0, P_E1, P_E2, P_E3, P_E4, P_E5, P_E6, P_E7,
     P_COUNT
 };

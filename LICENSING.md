@@ -49,18 +49,21 @@ source under the same licence. That includes devices that ship with modified Fel
 
 ## FM1 Rack (this fork)
 
-FM1 Rack adds the BRAIDS engine to Felucca 1.7.0 (`FM1-RACK.md`). Its own files are GPL-3.0-only like Felucca's:
-`firmware/src/eng_braids.c`, `firmware/mi/` (the C++ glue and the freestanding headers), `tools/mi_build.py`,
-`tools/mi_trim.py`, `tools/build_mi_host.sh`, `tests/braids_test.c`, and its changes to Felucca's files.
+FM1 Rack is Felucca 1.7.0 made a dedicated rack (`FM1-RACK.md`): Felucca's own engines are dropped, and its sound
+comes from Mutable Instruments' module code. Its own files are GPL-3.0-only like Felucca's: `firmware/src/eng_macro.c`,
+`eng_model.c`, `rack_mod.c`, `firmware/app_rack.ld`, `firmware/mi/` (the C++ glue, the float maths, the freestanding
+headers, the overrides), `tools/mi_build.py`, `tools/mi_trim.py`, `tools/build_mi_host.sh`, `tests/rack_test.c`, and
+its changes to Felucca's files.
 
 | What | Licence | Where |
 | --- | --- | --- |
-| Braids (macro oscillator) and Peaks (envelope, LFO) by Emilie Gillet, from pichenettes/eurorack, compiled from the submodule `ext/eurorack` (with `tools/mi_build.py`'s build-time patches: per-object random numbers, the wavetable models silenced, the resource tables cut) | MIT | `ext/eurorack/`, `LICENSES/MIT-Braids-Peaks.txt` |
-| Grids' drum map by Emilie Gillet (the 25 nodes and their 5 x 5 map) | GPL-3.0 | `firmware/src/grids_map.h` |
+| Braids (MACRO), Plaits (MODEL), Warps' cross-modulation (XMOD), Clouds (GRAIN) and Peaks (ENV, LFO) by Emilie Gillet, from pichenettes/eurorack, compiled from the submodule `ext/eurorack` (with `tools/mi_build.py`'s build-time patches: per-object random numbers for Braids and Peaks, some models silenced, Clouds' spectral mode left out, two tables at a quarter of their points, the resource tables cut) | MIT | `ext/eurorack/`, `LICENSES/MIT-Mutable-Instruments.txt` |
+| Grids' drum map by Emilie Gillet (the 25 nodes and their 5 x 5 map: TRIG1..3) | GPL-3.0 | `firmware/src/grids_map.h` |
 
-The MENU's CREDITS list them. "Mutable Instruments" is a registered trademark: the eurorack guidelines ask derivative
-works not to use the name or the module names, so BRAIDS and its modulators keep those names only while FM1 Rack
-stays private.
+The MENU's CREDITS list them. "Mutable Instruments" is a registered trademark, and the eurorack guidelines ask
+derivative works not to use the name or the module names: on screen the rack uses its own (MACRO, MODEL, XMOD,
+GRAIN, ENV, LFO, SLOPE, CYCLE, TRIG1..3); the modules' names appear only in the credits and these notices, as the
+attribution of the code.
 
 ## Hügelton Instruments' own work
 

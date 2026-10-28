@@ -66,9 +66,10 @@ static const menu_credit_t MENU_CREDITS[] = {
     {"Emilie Gillet / MIT", MC_TEXT},
     {"https://github.com/pichenettes/eurorack", MC_URL},
     {"", MC_TEXT},
-#if FELUCCA_BRAIDS
-    {"BRAIDS + PEAKS + GRIDS (FM1 RACK)", MC_TITLE},
-    {"Emilie Gillet / MIT (Braids, Peaks), GPL-3.0 (Grids)", MC_TEXT},
+#if FELUCCA_RACK
+    {"FM1 RACK: MUTABLE INSTRUMENTS CODE", MC_TITLE},
+    {"MACRO Braids, MODEL Plaits, XMOD Warps, GRAIN Clouds,", MC_TEXT},
+    {"ENV LFO Peaks: Emilie Gillet, MIT. TRIG Grids: GPL-3.0", MC_TEXT},
     {"https://github.com/pichenettes/eurorack", MC_URL},
     {"", MC_TEXT},
 #endif
@@ -123,8 +124,13 @@ static int32_t menu_document(int32_t y, int draw)
 {
     uint32_t i;
     if (draw) {
+#if FELUCCA_RACK
+        cv_text(6, y + 2, &AF_L, "FM1 RACK", T_THEME);
+        cv_text(6, y + 38, &AF_S, "A Felucca fork: modules", T_TEXT);
+#else
         cv_text(6, y + 2, &AF_L, "FELUCCA", T_THEME);
         cv_text(6, y + 38, &AF_S, "Multi-engine synthesizer", T_TEXT);
+#endif
         cv_text(6, y + 58, &AF_M, FELUCCA_VERSION, T_THEME);
         cv_text_r(232, y + 61, &AF_S, __DATE__, T_MID, T_BG);
         cv_text(6, y + 82, &AF_S, "(C) 2026 Leo Kuroshita", T_TEXT);

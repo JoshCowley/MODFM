@@ -165,6 +165,17 @@ _Static_assert(sizeof(project_v5_t) == 3352u && sizeof(project_v6_t) == 3388u, "
  * channels make, else CH1-4), which is all a firmware before 1.5.5 reads (these bytes it never did): a TRACK project plays
  * there as that block. Every project before has them 0: channels 1..4, MIDI IN as its G_ROUTE says */
 #define PROJ_MIDI_OFF (PROJ_FM6_OFF - 3u)
+/* FM1 Rack: its tracks have 127 parameters (the rack's slots: core.h P_MATYP ..), 64 bytes more than FUN10's spare
+ * held. FM6 is dropped, so a rack project (np above Felucca's 111) has no patch block: its tracks run on into those
+ * bytes and MIDI IN TRACK's 3 bytes sit just before the name (PROJ_RACK_MIDI_OFF). Felucca refuses it (np > its
+ * P_COUNT: EMPTY there); a Felucca project (np 111 or less) loads here as it was written (its patches unread) */
+#define PROJ_NP_FELUCCA 111u
+#define PROJ_RACK_MIDI_OFF (PROJ_NAME_OFF - 3u)
+#if FELUCCA_RACK
+#define PROJ_MIDI_AT(np) ((np) > PROJ_NP_FELUCCA ? PROJ_RACK_MIDI_OFF : PROJ_MIDI_OFF)
+#else
+#define PROJ_MIDI_AT(np) PROJ_MIDI_OFF
+#endif
 typedef union { uint32_t align; uint8_t raw[PROJ_STORE_SIZE]; } project_store_t;
 _Static_assert(G_COUNT == 27u, "FUN7 globals retain original IDs");
 _Static_assert(sizeof(project_store_t) == 3840u && PROJ_STORE_V7 == sizeof(project_v6_t), "FUN10 / FUN7 sizes");
@@ -592,7 +603,7 @@ static uint32_t proj_route_fallback(const uint8_t *mch)
             return 0;
     return mch[0] % 4u || mch[0] >= 16u ? 0u : mch[0] ? mch[0] / 4u + 1u : 0u;
 }
-static void proj_midi_pack(uint8_t *b, const project_t *q)
+static void proj_midi_pack(uint8_t *b, const project_t *q, uint32_t off)
 {
     uint32_t k, v = 0;
     for (k = 0; k < NTRK; k++)
@@ -602,11 +613,11 @@ static void proj_midi_pack(uint8_t *b, const project_t *q)
         memcpy(b + 8 + 2u * G_ROUTE, &r, 2);
         v |= 1u << 23;
     }
-    b[PROJ_MIDI_OFF] = (uint8_t)v; b[PROJ_MIDI_OFF + 1u] = (uint8_t)(v >> 8); b[PROJ_MIDI_OFF + 2u] = (uint8_t)(v >> 16);
+    b[off] = (uint8_t)v; b[off + 1u] = (uint8_t)(v >> 8); b[off + 2u] = (uint8_t)(v >> 16);
 }
-static void proj_midi_unpack(project_t *q, const uint8_t *b)
+static void proj_midi_unpack(project_t *q, const uint8_t *b, uint32_t off)
 {
-    uint32_t k, v = b[PROJ_MIDI_OFF] | (uint32_t)b[PROJ_MIDI_OFF + 1u] << 8 | (uint32_t)b[PROJ_MIDI_OFF + 2u] << 16, f;
+    uint32_t k, v = b[off] | (uint32_t)b[off + 1u] << 8 | (uint32_t)b[off + 2u] << 16, f;
     for (k = 0; k < NTRK; k++) {
         f = (v >> (5u * k)) & 31u;
         q->mch[k] = (uint8_t)(f < MCH_N ? f : 0u);
@@ -647,11 +658,12 @@ static int proj_pack(project_store_t *out, const project_t *q)
             b[pos++] = (uint8_t)(s->probability | (r >> 1) << 7);
         }
     }
-    if (pos + sizeof q->chain + sizeof q->motion > PROJ_MIDI_OFF) return 0;
+    if (pos + sizeof q->chain + sizeof q->motion > PROJ_MIDI_AT(P_COUNT)) return 0;
     memcpy(b + pos, &q->chain, sizeof q->chain); pos += sizeof q->chain;
     memcpy(b + pos, &q->motion, sizeof q->motion);
-    proj_midi_pack(b, q);
-    memcpy(b + PROJ_FM6_OFF, q->fm6, sizeof q->fm6);
+    proj_midi_pack(b, q, PROJ_MIDI_AT(P_COUNT));
+    if (PROJ_MIDI_AT(P_COUNT) == PROJ_MIDI_OFF)         /* (FM1 Rack: no patches) */
+        memcpy(b + PROJ_FM6_OFF, q->fm6, sizeof q->fm6);
     {   /* the name (0-padded; stops at the first 0) */
         char n[PROJ_NAME_LEN + 1u];
         memcpy(b + PROJ_NAME_OFF, n, proj_name_get(n, (const uint8_t *)q->name));
@@ -702,6 +714,9 @@ static int proj_unpack(project_t *q, const uint8_t *b, uint32_t st)
 {
     uint32_t pos = 68u, t, i, magic, size, sum, np = b[66], v7 = st == PROJ_STORE_V7, v10 = st == PROJ_STORE_SIZE;
     uint32_t name_off = st - 4u - PROJ_NAME_LEN, end = v7 ? name_off : name_off - NTRK * FM6_PACKED;
+    uint32_t rack = v10 && PROJ_MIDI_AT(np) != PROJ_MIDI_OFF;   /* an FM1 Rack project: no patches (see the top) */
+    if (rack)
+        end = PROJ_RACK_MIDI_OFF;
     uint32_t mot = v10 ? sizeof q->motion : PROJ_MOTION_V9, chn = v10 ? sizeof q->chain : sizeof(chain_v9_t);
     memcpy(&magic, b, 4); memcpy(&size, b + 4, 4); memcpy(&sum, b + st - 4u, 4);
     if (magic != (v7 ? PROJ_MAGIC_V7 : st == PROJ_STORE_V8 ? PROJ_MAGIC_V8 : st == PROJ_STORE_V9 ? PROJ_MAGIC_V9 : PROJ_MAGIC) ||
@@ -751,9 +766,9 @@ static int proj_unpack(project_t *q, const uint8_t *b, uint32_t st)
         return 0;
     if (!proj_motion_ids(&q->motion, np) || !chain_valid(&q->chain) || !motion_valid(&q->motion)) return 0;
     if (v10)
-        proj_midi_unpack(q, b);                         /* (1.5.5: 0 in every FUN10 before, FUN9..FUN7 have none) */
+        proj_midi_unpack(q, b, PROJ_MIDI_AT(np));       /* (1.5.5: 0 in every FUN10 before, FUN9..FUN7 have none) */
     for (t = 0; t < NTRK; t++) {
-        if (v7)
+        if (v7 || rack)
             memcpy(q->fm6[t], FM6_INIT, FM6_PACKED);
         else
             for (i = 0; i < FM6_PACKED; i++)
@@ -1082,12 +1097,21 @@ static int project_restore_runtime(const project_t *input)
         track_t *t = &trk[k];
         const proj_trk_t *s = &p->t[k];
         uint32_t e = s->engine;                         /* (< NENGINES: proj_engines_ok) */
+#if FELUCCA_RACK
+        uint32_t gone = !eng_ok(e);                     /* FM1 Rack: a track of one of Felucca's engines loads as MACRO, */
+        e = eng_idx(e);                                 /* with MACRO's first sound (the values meant another engine) */
+#endif
         t->eng_req = (uint8_t)e;
         t->user = 0;                                    /* (no user preset slot is saved) */
         for (i = 0; i < P_COUNT; i++) {                 /* every value back inside its range (param_fit) */
             const param_desc_t *d = param_desc_of(e, i);
             t->p[i] = (int16_t)param_fit(d, s->p[i]);
         }
+#if FELUCCA_RACK
+        if (gone)
+            for (i = 0; i < 8u; i++)
+                t->p[P_E0 + i] = ENGINES[e]->presets[0].e[i];
+#endif
         t->preset = (uint8_t)(ENGINES[e]->npresets ? (s->preset >= PROJ_DEF_KEEP ? 0u : s->preset) % ENGINES[e]->npresets : 0u);
         memcpy(t->step, s->step, sizeof t->step);
         proj_steps(t->step);

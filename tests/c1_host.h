@@ -18,6 +18,7 @@ static pthread_mutex_t c1h_mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t c1h_cv = PTHREAD_COND_INITIALIZER;
 static void (*c1h_fn)(uint32_t);
 static uint32_t c1h_arg, c1h_job, c1h_done, c1h_up, c1h_blocks, c1h_taken;
+static uint32_t c1h_parts;                          /* every part it was ever handed (bit k: part k) */
 static int c1h_off;                                 /* 1: no second core (the reference renders) */
 
 static void *c1h_main(void *x)
@@ -53,6 +54,7 @@ static int c1h_run(void (*fn)(uint32_t), uint32_t arg)
     c1h_arg = arg;
     c1h_job++;
     c1h_taken++;
+    c1h_parts |= arg & 0xFFu;
     pthread_cond_broadcast(&c1h_cv);
     pthread_mutex_unlock(&c1h_mu);
     return 1;

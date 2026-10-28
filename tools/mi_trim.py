@@ -21,7 +21,7 @@ def main():
     head = text[:text.index("namespace " + ns)]
     defs = {}
     order = []
-    for m in re.finditer(r"^const\s+[\w:]+\s*\*?\s*(\w+)\[\]\s*=\s*\{.*?^\};\n", text, re.M | re.S):
+    for m in re.finditer(r"^const\s+[\w:]+\s*\*?\s*(?:const\s+)?(\w+)\[\]\s*=\s*\{.*?^\};\n", text, re.M | re.S):
         defs[m.group(1)] = m.group(0)
         order.append(m.group(1))
     stub = {w[1:] for w in want if w.startswith("~")}

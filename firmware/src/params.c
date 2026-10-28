@@ -53,12 +53,23 @@ static const char *const N_MIDI_INPUT[] = {"USB", "TRS"};
 static const char *const N_ROUTE[] = {"CH1-4", "SEL", "CH5-8", "CH9-12", "CH13-16", "TRACK"};
 static const char *const N_NOTE[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 static const char *const N_DASH[] = {"--"};
+#if FELUCCA_RACK
+static const char *const N_RTYPE[] = {"GRAN", "STRCH", "LOOP", "FRZ"};   /* G_RTYPE: GRAIN's MODE (fx.c grain_bus) */
+#else
 static const char *const N_RTYPE[] = {"ROOM", "SPRING", "HALL"};   /* G_RTYPE: the reverb bus's model (fx.c) */
+#endif
 static const char *const N_GO[] = {"--", "GO"};
 static const char *const N_SLCR[] = {"OFF", "GATE", "STUT"};             /* SL_OFF .. SL_STUT (slicer.c) */
 static const char *const N_SLDIV[] = {"1/8", "1/16", "1/32", "8T", "16T", "32T"};   /* SL_DEN */
 /* the INSERT's types (1.5, fx.c IT_*; append-only: stored). Its three values A B C mean what the type says (ins_desc) */
-static const char *const N_ITYPE[] = {"OFF", "SOFT", "HARD", "FOLD", "FUZZ", "CRUSH", "PHASR", "FLANG", "CHOR"};
+static const char *const N_ITYPE[] = {"OFF", "SOFT", "HARD", "FOLD", "FUZZ", "CRUSH", "PHASR", "FLANG", "CHOR",
+#if FELUCCA_RACK
+                                      "XMOD",   /* FM1 Rack: Warps' cross-modulation (fx.c ins_xmod) */
+#endif
+};
+#if FELUCCA_RACK
+static const char *const N_XCARR[] = {"SIN", "TRI", "SAW", "PLS", "S+5", "S+7", "S+12", "S-12"};   /* (S: the sine, semitones up / down) */
+#endif
 /* CRUSH: BITS 1..16 and RATE (the held sample's rate, fx.c INS_HOLD) over the range in 16 even parts (0-terminated) */
 static const char *const N_IBITS[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
                                       "16", 0};
@@ -67,7 +78,11 @@ static const char *const N_IRATE[] = {"689", "919", "1.1k", "1.4k", "1.8k", "2.2
 /* modulation matrix (mod.c): sources, destinations (E1..E8 = P_E0..P_E7: shown with the engine's labels).
  * Append-only (stored values keep their meaning): S&H SLEW and DEPTH (#132) came after EXPR and E8; VEL and TIME
  * (1.5.6, #213: at the note) after DEPTH */
-static const char *const N_MSRC[] = {"OFF", "LFO", "ENV", "VEL", "KEY", "RAND", "MODW", "AT", "EXPR", "S&H", "SLEW"};
+static const char *const N_MSRC[] = {"OFF", "LFO", "ENV", "VEL", "KEY", "RAND", "MODW", "AT", "EXPR", "S&H", "SLEW",
+#if FELUCCA_RACK
+                                     "MODA", "MODB",              /* FM1 Rack: the part's MOD A, MOD B (rack_mod.c) */
+#endif
+};
 static const char *const N_MDST[] = {"OFF", "PITCH", "CUT", "SHP", "AMP", "PAN", "DIST", "CHO", "DLY", "REV", "RATE",
                                      "VIB", "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "DEPTH", "VEL", "TIME"};
 static const char *const N_ENGNAME[] = {"ANALOG", FELUCCA_FM4 ? "DIGITAL" : "-", "PHASE", "LOFI", "SAMPLE", "VOICE", "TRIO", "WHEEL", "GRAIN", "PHYS",
@@ -117,7 +132,11 @@ static const param_desc_t TP[P_COUNT] = {
     [P_DIST] = PD("DST", F_PCT, 0, 127, 0),
     [P_CHOR] = PD("CHO", F_PCT, 0, 127, 0),
     [P_DLY] = PD("DLY", F_PCT, 0, 127, 0),
+#if FELUCCA_RACK
+    [P_REV] = PD("GRN", F_PCT, 0, 127, 0),       /* FM1 Rack: the send to GRAIN (where the reverb was) */
+#else
     [P_REV] = PD("REV", F_PCT, 0, 127, 0),
+#endif
     [P_VOICE] = PE("VCE", N_VOICE, 0),
     [P_GLIDE] = PD("GLD", F_TIME, 0, 127, 0),
     [P_GLMODE] = PE("GLMOD", N_GLMODE, 0),
@@ -165,22 +184,36 @@ static const param_desc_t TP[P_COUNT] = {
     [P_IMIX] = PD("MIX", F_PCT, 0, 127, 127),
     [P_FTYPE] = PE("TYPE", N_FTYPE, 0),           /* 1.5 (#104): ANALOG's filter, LP = as before (eng_analog.c) */
     [P_ESYNC] = PE("ESYNC", N_ONOFF, 0),          /* 1.5 (#175): OFF = ATK DEC REL in ms, as before (voice.c esync) */
+#if FELUCCA_RACK                                  /* FM1 Rack: MOD A, MOD B (rack_mod.c; their labels: track_desc) */
+    [P_MATYP] = PE("MOD A", N_RMOD, 0),
+    [P_MA1] = PD("A1", F_PCT, 0, 127, 64), [P_MA2] = PD("A2", F_PCT, 0, 127, 64),
+    [P_MA3] = PD("A3", F_PCT, 0, 127, 64), [P_MA4] = PD("A4", F_PCT, 0, 127, 0),
+    [P_MBTYP] = PE("MOD B", N_RMOD, 0),
+    [P_MB1] = PD("B1", F_PCT, 0, 127, 64), [P_MB2] = PD("B2", F_PCT, 0, 127, 64),
+    [P_MB3] = PD("B3", F_PCT, 0, 127, 64), [P_MB4] = PD("B4", F_PCT, 0, 127, 0),
+    [P_RK0] = PD("-", F_INT, 0, 0, 0), [P_RK1] = PD("-", F_INT, 0, 0, 0), [P_RK2] = PD("-", F_INT, 0, 0, 0),
+    [P_RK3] = PD("-", F_INT, 0, 0, 0), [P_RK4] = PD("-", F_INT, 0, 0, 0), [P_RK5] = PD("-", F_INT, 0, 0, 0),
+#endif
 };
 
 /* the INSERT's A B C as its TYPE means them (TP's ranges and defaults): the drives DRIVE TONE LEVEL, CRUSH BITS RATE
  * LPF, the swept ones RATE DEPTH FDBK; OFF TP's own */
 #define PU(l, f, df, n, u) {l, f, 0, 127, df, n, u}
-static const param_desc_t INS_DESC[3][3] = {
+static const param_desc_t INS_DESC[4][3] = {
     {PU("DRIVE", F_PCT, 64, 0, 0), PU("TONE", F_CUTOFF, 96, 0, 0), PU("LEVEL", F_DB, 96, 0, 0)},
     {PU("BITS", F_INT, 64, N_IBITS, 0), PU("RATE", F_INT, 96, N_IRATE, "Hz"), PU("LPF", F_CUTOFF, 96, 0, 0)},
     {PU("RATE", F_LFOHZ, 64, 0, 0), PU("DEPTH", F_PCT, 96, 0, 0), PU("FDBK", F_PCT, 96, 0, 0)},
+#if FELUCCA_RACK
+    {PU("ALGO", F_PCT, 0, 0, 0), PU("TIMB", F_PCT, 64, 0, 0), {"CARR", F_ENUM, 0, 7, 0, N_XCARR, 0}},   /* XMOD */
+#endif
 };
 #undef PU
 static const param_desc_t *ins_desc(int32_t type, uint32_t k)
 {
     if (type <= 0 || type >= (int32_t)NELEM(N_ITYPE))
         return &TP[P_IA + k];
-    return &INS_DESC[type < 5 ? 0 : type == 5 ? 1 : 2][k];   /* (IT_SOFT .. IT_FUZZ, IT_CRUSH, the swept ones) */
+    return &INS_DESC[type < 5 ? 0 : type == 5 ? 1 : type < 9 ? 2 : 3][k];   /* (IT_SOFT .. IT_FUZZ, IT_CRUSH, the swept
+                                                                              * ones, XMOD) */
 }
 
 static const param_desc_t GP[G_COUNT] = {
@@ -192,15 +225,25 @@ static const param_desc_t GP[G_COUNT] = {
     [G_DFDBK] = PD("FDBK", F_PCT, 0, 120, 60),
     [G_DCOLOR] = PD("COLR", F_PCT, 0, 127, 70),
     [G_DMIX] = PD("MIX", F_PCT, 0, 127, 90),
+#if FELUCCA_RACK
+    [G_RSIZE] = PD("SIZE", F_PCT, 0, 127, 70),   /* FM1 Rack: GRAIN (fx.c grain_bus) */
+    [G_RDAMP] = PD("TEXT", F_PCT, 0, 127, 64),
+#else
     [G_RSIZE] = PD("SIZE", F_PCT, 0, 127, 90),
     [G_RDAMP] = PD("DAMP", F_PCT, 0, 127, 60),
+#endif
     [G_CRATE] = PD("CRT", F_LFOHZ, 0, 127, 40),
     [G_CDEPTH] = PD("CDP", F_PCT, 0, 127, 60),
     /* G_MIDI, G_SYNC, G_INFO: the old SYSTEM page's (gone in 1.2), on no page: MIDI's value was never read (its card
      * showed the USB state), SYNC was a placeholder, CPU a reading; the USB state and the CPU load are MENU > SYSTEM >
      * INFO's now (ui_menu.c). Kept: the ids and G_COUNT are fixed by the formats and the protocol */
+#if FELUCCA_RACK
+    [G_MIDI] = PD("PTCH", F_SEMI, -24, 24, 0),    /* FM1 Rack: GRAIN's (these ids were inert) */
+    [G_SYNC] = PD("VERB", F_PCT, 0, 127, 30),
+#else
     [G_MIDI] = PE("MIDI", N_MIDI_INPUT, 0),
     [G_SYNC] = PE("SYNC", N_DASH, 0),
+#endif
     /* MIDI IN's routing, edited on MENU > MIDI > MIDI IN (1.2: menu_items.c MI_MIDIIN; up to 1.1.5 GLO > SYSTEM ROUT),
      * stored with the project as before. (was "--": stored 0 = CH1-4, as MIDI IN always was) */
     [G_ROUTE] = PE("ROUT", N_ROUTE, 0),
@@ -210,16 +253,29 @@ static const param_desc_t GP[G_COUNT] = {
     [G_LOAD] = PE("LOAD", N_GO, 0),
     [G_SAVE] = PE("SAVE", N_GO, 0),
     [G_ENGSEL] = PE("ENG", N_ENGNAME, 0),
+#if FELUCCA_RACK
+    [G_ENGGO] = PD("FDBK", F_PCT, 0, 127, 20),   /* FM1 Rack: GRAIN's (unused: "ids are fixed") */
+#else
     [G_ENGGO] = PE("SET", N_GO, 0),
+#endif
     [G_CLRSEQ] = PE("CLRSQ", N_GO, 0),
     [G_INITSND] = PE("INIT", N_GO, 0),
     /* the reverb's model on the REVERB page: the id of the old GM drum channel (G_DRCH, inert since 1.0) */
+#if FELUCCA_RACK
+    [G_RTYPE] = PE("MODE", N_RTYPE, 0),          /* FM1 Rack: GRAIN's MODE */
+#else
     [G_RTYPE] = PE("TYPE", N_RTYPE, 2),         /* HALL at power-on since 1.2 (ROOM before; projects keep theirs) */
+#endif
     /* inert: they set the GM drum part (level, reverb send), which is gone (drums are the DRUM engine
      * on any part). On no page; kept so the ids and G_COUNT, which the project format and the
      * editor protocol depend on, do not move */
+#if FELUCCA_RACK
+    [G_DRLVL] = PD("POS", F_PCT, 0, 127, 40),    /* FM1 Rack: GRAIN's POSITION and DENSITY */
+    [G_DRREV] = PD("DENS", F_PCT, 0, 127, 80),
+#else
     [G_DRLVL] = PD("-", F_INT, 0, 0, 0),
     [G_DRREV] = PD("-", F_INT, 0, 0, 0),
+#endif
 };
 
 static const param_desc_t *track_desc(const track_t *t, uint32_t id)
@@ -229,6 +285,10 @@ static const param_desc_t *track_desc(const track_t *t, uint32_t id)
         const param_desc_t *d = e->desc ? e->desc(t, id - P_E0) : 0;   /* a mode-dependent label / names */
         return d ? d : &e->edit[id - P_E0];
     }
+#if FELUCCA_RACK
+    if (rack_mod_param(id))                           /* MOD A / MOD B's values as their TYPE names them */
+        return rack_mod_desc(t, id);
+#endif
     if (id >= P_IA && id <= P_IC)                     /* the INSERT's values as its TYPE names them */
         return ins_desc(t->p[P_ITYPE], id - P_IA);
     if (t->p[P_ESYNC] && (id == P_ATK || id == P_DEC || id == P_REL))   /* ENV SYNC: note values (1.5, #175) */
@@ -455,7 +515,12 @@ static const page_t PAGES[] = {
     {"INSERT", FAM_FX, SC_TRACK, GR_INS, {P_ITYPE, P_IA, P_IB, P_IC}},   /* 1.5: the track's INSERT (fx.c) */
     {"INSERT 2", FAM_FX, SC_TRACK, GR_INS, {P_IMIX, 0xFF, 0xFF, 0xFF}},  /* .. its dry / wet */
     {"DLY", FAM_FX, SC_GLOBAL, GR_NONE, {G_DTIME, G_DFDBK, G_DCOLOR, G_DMIX}},
+#if FELUCCA_RACK
+    {"GRAIN", FAM_FX, SC_GLOBAL, GR_NONE, {G_RTYPE, G_DRLVL, G_RSIZE, G_MIDI}},   /* FM1 Rack: MODE POS SIZE PTCH */
+    {"GRAIN 2", FAM_FX, SC_GLOBAL, GR_NONE, {G_DRREV, G_RDAMP, G_ENGGO, G_SYNC}},  /* DENS TEXT FDBK VERB */
+#else
     {"REVERB", FAM_FX, SC_GLOBAL, GR_NONE, {G_RTYPE, G_RSIZE, G_RDAMP, 0xFF}},   /* TYPE: ROOM / SPRING / HALL */
+#endif
     {"CHORUS", FAM_FX, SC_GLOBAL, GR_NONE, {G_CRATE, G_CDEPTH, 0xFF, 0xFF}},
     {"SCL", FAM_SCL, SC_TRACK, GR_SCALE, {P_ROOT, P_SCALE, P_QUANT, P_TRANS}},
     {"CHORD", FAM_SCL, SC_TRACK, GR_CHORD, {P_CHRD, P_VOIC, 0xFF, 0xFF}},   /* SCL again: the chord keys (chord.c) */
@@ -473,6 +538,13 @@ static const page_t PAGES[] = {
     {"OP3 ENV", FAM_EDIT, SC_TRACK, GR_ADSR, {P_FM3_ATK, P_FM3_DEC, P_FM3_SUS, P_FM3_REL}},
     {"OP4 ENV", FAM_EDIT, SC_TRACK, GR_ADSR, {P_FM4_ATK, P_FM4_DEC, P_FM4_SUS, P_FM4_REL}},
     {"OP LEVEL", FAM_EDIT, SC_TRACK, GR_NONE, {P_FM1_LEVEL, P_FM2_LEVEL, P_FM3_LEVEL, P_FM4_LEVEL}},
+#if FELUCCA_RACK
+    /* FM1 Rack: the part's rack. RACK: its slots (MOD A, MOD B, the SHAPER: the INSERT's TYPE); then each modulator's
+     * values (their labels follow their TYPE); the matrix (MOD) routes them anywhere */
+    {"RACK", FAM_EDIT, SC_TRACK, GR_NONE, {P_MATYP, P_MBTYP, P_ITYPE, P_IMIX}},
+    {"MOD A", FAM_EDIT, SC_TRACK, GR_NONE, {P_MA1, P_MA2, P_MA3, P_MA4}},
+    {"MOD B", FAM_EDIT, SC_TRACK, GR_NONE, {P_MB1, P_MB2, P_MB3, P_MB4}},
+#endif
     {"VOICE", FAM_EDIT, SC_TRACK, GR_NONE, {P_VOICE, P_GLIDE, P_GLMODE, P_PRIO}},
     {"VOICE 2", FAM_EDIT, SC_TRACK, GR_NONE, {P_ALLOC, P_DETUNE, P_PAN, P_MUTE}},
     {"VOICE 3", FAM_EDIT, SC_TRACK, GR_NONE, {P_SPRD, 0xFF, 0xFF, 0xFF}},   /* #148: SPREAD */

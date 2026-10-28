@@ -1,3 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #pragma once
 #include "math.h"
+namespace std {
+using ::sinf; using ::cosf; using ::tanf; using ::expf; using ::logf; using ::powf; using ::sqrtf; using ::fabsf;
+using ::floorf; using ::ceilf; using ::fmodf; using ::tanhf; using ::atanf; using ::atan2f;
+using ::sin; using ::cos; using ::tan; using ::exp; using ::log; using ::log2; using ::log10; using ::pow; using ::sqrt;
+using ::fabs; using ::floor; using ::ceil; using ::round; using ::fmod; using ::tanh; using ::atan; using ::atan2;
+using ::exp2; using ::trunc; using ::asin; using ::acos; using ::abs;
+}

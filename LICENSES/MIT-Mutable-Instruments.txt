@@ -2,10 +2,18 @@ Braids (braids/analog_oscillator.cc, digital_oscillator.cc, macro_oscillator.cc,
 Copyright 2012 Emilie Gillet.
 Peaks (peaks/modulations/lfo.cc, multistage_envelope.cc, resources.cc and their headers)
 Copyright 2013 Emilie Gillet.
-stmlib (the headers Braids and Peaks include)
-Copyright 2012 Emilie Gillet.
+Plaits (plaits/dsp/: the voice, its engines and their DSP, resources.cc and their headers)
+Copyright 2016, 2021 Emilie Gillet.
+Clouds (clouds/dsp/: the granular processor and its DSP, resources.cc and their headers)
+Copyright 2014 Emilie Gillet.
+Warps (warps/dsp/oscillator.cc, the cross-modulation functions of warps/dsp/modulator.cc, resources.cc and their
+headers)
+Copyright 2014 Emilie Gillet.
+stmlib (stmlib/dsp/units.cc, atan.cc and the headers the modules include)
+Copyright 2012, 2014 Emilie Gillet.
 
-From https://github.com/pichenettes/eurorack (ext/eurorack in FM1 Rack), used in the BRAIDS engine.
+From https://github.com/pichenettes/eurorack (ext/eurorack in FM1 Rack), used in FM1 Rack's MACRO (Braids), MODEL
+(Plaits), XMOD (Warps), GRAIN (Clouds) and the ENV / LFO modulators (Peaks).
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

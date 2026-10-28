@@ -50,11 +50,18 @@
  * presets read and write t->p from the main loop, which the ISR preempts; TIMER5 only fills the MIDI rings),
  * and the engines read t->p as before. An engine reads its parameters in note_on (events_block) unmodulated.
  * Nothing active (every slot with SRC, DST or AMT at 0): no work, and the sound is bit-identical. */
-enum { MS_OFF, MS_LFO, MS_ENV, MS_VEL, MS_KEY, MS_RAND, MS_MODW, MS_AT, MS_EXPR, MS_SH, MS_SLEW, MS_N };
+enum { MS_OFF, MS_LFO, MS_ENV, MS_VEL, MS_KEY, MS_RAND, MS_MODW, MS_AT, MS_EXPR, MS_SH, MS_SLEW,
+#if FELUCCA_RACK
+       MS_MODA, MS_MODB,                                   /* FM1 Rack: the part's MOD A, MOD B (rack_mod.c) */
+#endif
+       MS_N };
 enum { MD_OFF, MD_PITCH, MD_CUT, MD_SHP, MD_AMP, MD_PAN, MD_DIST, MD_CHO, MD_DLY, MD_REV, MD_RATE, MD_VIB, MD_E1,
        MD_DEPTH = MD_E1 + 8, MD_VEL, MD_TIME, MD_N };   /* (append-only: the stored values keep their meaning) */
 _Static_assert(NELEM(N_MSRC) == MS_N && NELEM(N_MDST) == MD_N, "N_MSRC / N_MDST == MS_* / MD_*");
 _Static_assert(P_M2SRC == P_M1SRC + 3 && P_M4AMT == P_M1SRC + 11 && P_M4AMT + 1 == P_FM1_ATK, "matrix slots: 3 ids each");
+#if FELUCCA_RACK
+_Static_assert(MS_MODB == 12 && MD_E1 == 12 && MD_CUT == 2, "eng_macro.c MACRO_RACK's matrix numbers");
+#endif
 #define NMSLOT 4u
 #define MS_VOICE(s) ((s) >= MS_ENV && (s) <= MS_RAND)             /* a value per voice */
 #define MS_BIPOLAR(s) ((s) == MS_LFO || (s) == MS_KEY || (s) == MS_RAND || (s) >= MS_SH)
@@ -124,6 +131,11 @@ static int32_t mod_tsrc(const track_t *t, uint32_t s, int32_t lfo)
         return t->mw * 258;
     case MS_AT:
         return t->at * 258;
+#if FELUCCA_RACK
+    case MS_MODA:
+    case MS_MODB:
+        return rack_mod_val(t, s - MS_MODA);
+#endif
     default:
         return (127 - t->ex_off) * 258;
     }

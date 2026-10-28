@@ -772,7 +772,9 @@ enum { S_HOME, S_HOME_IDLE, S_MESSAGE, S_MESSAGE_KEY, S_MESSAGE_NOFILE, S_PRESET
        S_DETAIL, S_DETAIL_PLAYING, S_DETAIL_REST, S_DETAIL_DRUM, S_ROLL_MARKS, S_DRUM_MARKS, S_HELP_DETAIL,
        S_DETAIL_COND, S_DETAIL_FILL, S_AUTO_COND, S_GLO_FILL, S_SEQ_EUCLID, S_SEQ_EUCLID_DRUM, S_SEQ_EUCLID_64,
        S_MENU_SELECT, S_PROJECT_ERASE, S_CONFIRM_ERASE_PROJ, S_TOOLS_CLEAN, S_CONFIRM_CLEAN,
-       S_MENU_MIDI_TRACK, S_MENU_MIDI_TCH_UNUSED, S_MENU_MIDI_AUTO, S_HOME_TRACKS_MIDI, S_MIXER_MIDI, S_EDIT_PHASE_FOLD, S_COUNT };
+       S_MENU_MIDI_TRACK, S_MENU_MIDI_TCH_UNUSED, S_MENU_MIDI_AUTO, S_HOME_TRACKS_MIDI, S_MIXER_MIDI, S_EDIT_PHASE_FOLD,
+       S_RACK, S_RACK_MODA, S_RACK_MODB, S_RACK_XMOD, S_RACK_GRAIN, S_RACK_GRAIN2, S_RACK_MODEL, S_RACK_MODEL2, S_RACK_PRESETS,
+       S_COUNT };
 static const char *const S_NAME[S_COUNT] = {"home", "home_idle", "message", "message_key", "message_nofile", "presets", "presets_nofav", "user",
     "phrases", "project", "tools", "song_empty", "song", "step", "auto_steps", "auto_add_chance", "automation", "drum",
     "drum_hand", "drum_cym", "mixer", "mixer_from_home", "mixer_pan", "env", "env_dest", "lfo", "mod", "fx", "slicer", "dly", "scl", "chord", "chord_wide", "chord_off", "chord_kit", "arp",
@@ -803,7 +805,8 @@ static const char *const S_NAME[S_COUNT] = {"home", "home_idle", "message", "mes
     "detail_cond", "detail_fill", "auto_cond", "layer_glo_fill", "layer_seq_euclid", "layer_seq_euclid_drum",
     "layer_seq_euclid_64",
     "menu_select", "project_erase", "confirm_erase_project", "tools_clean", "confirm_clean",
-    "menu_midi_track", "menu_midi_channels_unused", "menu_midi_auto_select", "home_tracks_midi", "mixer_midi", "edit_phase_fold"};
+    "menu_midi_track", "menu_midi_channels_unused", "menu_midi_auto_select", "home_tracks_midi", "mixer_midi", "edit_phase_fold",
+    "rack", "rack_mod_a", "rack_mod_b", "rack_xmod", "rack_grain", "rack_grain2", "rack_model", "rack_model2", "rack_presets"};
 
 /* the STEP page's piano roll (ui_graph.c graph_roll) on track 1, stopped unless said: an empty pattern; ACID in
  * A minor; POLY chords (Am7 F C G, tied); a line with ties, slides and accents in C major; LEN 32 on its second
@@ -1224,6 +1227,23 @@ static void setup(int s)
     }
     case S_EDIT_GRAIN: eng(8); go_title("EDIT 2"); break;
     case S_EDIT_PHYS: eng(9); go_title("EDIT 1"); break;
+#if FELUCCA_RACK
+    /* FM1 Rack's own pages (on Felucca: what they fall back to, its first page) */
+    case S_RACK: eng(ENGI_MACRO); TSEL->p[P_MATYP] = RM_TRIG1; TSEL->p[P_MBTYP] = RM_CYCLE; TSEL->p[P_ITYPE] = IT_XMOD;
+        TSEL->p[P_IMIX] = 100; go_title("RACK"); break;
+    case S_RACK_MODA: eng(ENGI_MACRO); TSEL->p[P_MATYP] = RM_TRIG2; TSEL->p[P_MA4] = 90; go_title("MOD A"); ui.hot_col = 3;
+        ui.hot_t = 30; break;
+    case S_RACK_MODB: eng(ENGI_MODEL); TSEL->p[P_MBTYP] = RM_ENV; go_title("MOD B"); break;
+    case S_RACK_XMOD: eng(ENGI_MACRO); TSEL->p[P_ITYPE] = IT_XMOD; TSEL->p[P_IC] = 6; go_title("INSERT"); break;
+    case S_RACK_GRAIN: song.g[G_RTYPE] = 1; song.g[G_MIDI] = -12; go_title("GRAIN"); break;
+    case S_RACK_GRAIN2: go_title("GRAIN 2"); ui.hot_col = 3; ui.hot_t = 30; break;
+    case S_RACK_MODEL: eng(ENGI_MODEL); TSEL->p[P_E0] = 6; go_title("EDIT 1"); break;
+    case S_RACK_MODEL2: eng(ENGI_MODEL); TSEL->p[P_E5] = 60; TSEL->p[P_E6] = -20; go_title("EDIT 2"); break;
+    case S_RACK_PRESETS: eng(ENGI_MODEL); go_page(GR_BROWSE); break;
+#else
+    case S_RACK: case S_RACK_MODA: case S_RACK_MODB: case S_RACK_XMOD: case S_RACK_GRAIN: case S_RACK_GRAIN2:
+    case S_RACK_MODEL: case S_RACK_MODEL2: case S_RACK_PRESETS: break;
+#endif
     case S_EDIT_PHASE_FOLD: eng(2); TSEL->p[P_E7] = 80; go_title("EDIT 2"); ui.hot_col = 3; ui.hot_t = 30; break;   /* 1.5.5 FOLD (#104) */
     case S_ALG1: case S_ALG2: case S_ALG3: case S_ALG4: case S_ALG5: case S_ALG6: case S_ALG7: case S_ALG8:
         eng(1); TSEL->p[P_E0] = (int16_t)(s - S_ALG1);      /* the 8 DIGITAL charts; FB on the odd ones, IDX high .. 0 */
@@ -1642,7 +1662,11 @@ static void draw(int s)
     }
     if (s == S_SPLASH) {                          /* the power-on splash (main.c, before the UI): its lines, the version
                                                    * shown FELUCCA_VERSION (run_tests.sh: src/felucca.c's) */
+#if FELUCCA_RACK
+        static const char WANT[] = "FM1 Rack|" FELUCCA_VERSION "|a Felucca fork|H\xFCgelton Instruments";
+#else
         static const char WANT[] = "Felucca|" FELUCCA_VERSION "|H\xFCgelton Instruments|with community";
+#endif
         splash_seen[0] = 0;
         in_splash = 1;
         draw_splash();
@@ -1742,6 +1766,49 @@ static void sweep_motion(void)
     lint();
     memset(&motion, 0, sizeof motion);
 }
+#if FELUCCA_RACK
+/* FM1 Rack: MOD A, MOD B and the INSERT show their values' labels by their TYPE: every TYPE's values swept and linted
+ * (sweep_columns sees them at OFF, labelled "-") */
+static void sweep_rack(void)
+{
+    uint32_t e, i, c, ty;
+    char name[64];
+    for (e = ENGI_MACRO; e <= ENGI_MODEL; e++)
+        for (ty = 1; ty < RM_N + 1u; ty++)
+            for (i = 0; i < NPAGES; i++) {
+                if (!str_eq(PAGES[i].title, "MOD A") && !str_eq(PAGES[i].title, "MOD B") &&
+                    !str_eq(PAGES[i].title, "INSERT") && !str_eq(PAGES[i].title, "RACK"))
+                    continue;
+                state();
+                pal(UI_GREY_INDEX);
+                eng(e);
+                TSEL->p[P_MATYP] = TSEL->p[P_MBTYP] = (int16_t)(ty % RM_N);
+                TSEL->p[P_ITYPE] = ty == RM_N ? IT_XMOD : (int16_t)(ty % IT_N);
+                ui.home = 0; ui.page = (uint8_t)i; page_entered();
+                if (!page_visible(i)) continue;
+                snprintf(name, sizeof name, "%s%s/%s %s", large_on ? "LARGE " : "", ENGINES[e]->name, PAGES[i].title,
+                         N_RMOD[ty % RM_N]);
+                cur_name = name;
+                for (c = 0; c < 4u; c++) {
+                    int16_t *vp;
+                    const param_desc_t *d = page_desc(cur_page(), c, &vp);
+                    int32_t v, v0;
+                    if (!d || !d->label || d->label[0] == '-') continue;
+                    v0 = *vp;
+                    lg_span_begin();
+                    for (v = d->min; v <= d->max; v++) {
+                        *vp = (int16_t)v;
+                        lg_draw_one(c);
+                    }
+                    lg_span_end(c, d->label);
+                    *vp = (int16_t)v0;
+                }
+                draw(-1);
+                lint();
+            }
+}
+#endif
+
 static void sweep_columns(void)
 {
     uint32_t e, i, c, esync_pass = 0;
@@ -2364,6 +2431,9 @@ int main(int argc, char **argv)
                 }
         ui_style = ST_FLAT; style_apply();
         sweep_columns();                                /* every value of every column, tall */
+#if FELUCCA_RACK
+        sweep_rack();
+#endif
         large_on = 0;
         if (ntall < 100u) { fprintf(stderr, "ui_render: LARGE drew %u screens with tall cards only\n", ntall); return 1; }
         fprintf(rep, "MENU > LARGE (FLAT and LINE, every palette, the page / value sweep): %u lint findings; %u screens with tall"
@@ -2382,6 +2452,7 @@ int main(int argc, char **argv)
                lg_nspan, lg_njump, lg_nface[0], lg_nface[1], lg_nface[2]);
         if (lg_nspan < 100u) { fprintf(stderr, "ui_render: LARGE swept %u knobs tall only\n", lg_nspan); return 1; }
     }
+#if !FELUCCA_RACK                                   /* (FM1 Rack: no FM6) */
     {   /* every FM6 chart (the lint above, fmp_check, runs on each), in GREY: gray */
         uint32_t a, c0 = fmp_charts;
         for (a = 1; a <= 32u; a++) {
@@ -2419,7 +2490,11 @@ int main(int argc, char **argv)
                 }
         if (fmp_charts - c0 != 384u) { fprintf(stderr, "ui_render: %u FM6 operator charts drawn of 384\n", fmp_charts - c0); return 1; }
     }
+#endif
     sweep_columns();
+#if FELUCCA_RACK
+    sweep_rack();
+#endif
     roll_frames(argc > 2 ? argv[2] : 0);
     al_off = 1;                                     /* (the alignment check is not timed) */
     /* draw cost: a full redraw of a screen (all strips), and HOME frame by frame (the scope, every other frame) */

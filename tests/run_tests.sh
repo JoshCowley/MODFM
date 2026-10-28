@@ -407,34 +407,27 @@ if [ -f build/gen/felucca_tables.h ]; then
     $CC -O2 -w -Ibuild/gen -Ifirmware/src -pthread -o "$OUT/dualcore_test" tests/dualcore_test.c -lm
     run "second core: 4 parts of every preset, mixes: bit for bit on one core and on two, every split" \
         "$OUT/dualcore_test"
-    # FM1 Rack: the BRAIDS engine (FELUCCA_BRAIDS=1, the fork's device default): its C++ objects with the host's
-    # clang++ (tools/build_mi_host.sh, ext/eurorack), its own test, and Felucca's regression, second-core and UI
-    # checks with it built in
-    if command -v "${CXX:-clang++}" >/dev/null 2>&1 && [ -f ext/eurorack/braids/macro_oscillator.cc ]; then
+    # FM1 Rack (FELUCCA_RACK=1, the fork's device default): its C++ objects with the host's clang++
+    # (tools/build_mi_host.sh, ext/eurorack), its own test, the second-core and UI-render checks with it built in.
+    # (Felucca's regress.c and ui_test.c test Felucca's engines, which the rack drops: they run on the FELUCCA_RACK=0
+    # build above)
+    if command -v "${CXX:-clang++}" >/dev/null 2>&1 && [ -f ext/eurorack/plaits/dsp/voice.cc ]; then
         sh tools/build_mi_host.sh >/dev/null
-        run "FM1 Rack BRAIDS: tuning, the 43 models, PENV PLFO TIDE LOOP GRID, the shared oscillators, the presets" \
-            "$OUT/braids_test"
+        run "FM1 Rack: maths, MACRO, MODEL, MOD A / B, XMOD, GRAIN, the presets, the rack store" \
+            "$OUT/rack_test"
         MIO="$OUT/mi/*.o"
-        $CC -O2 -w -DFELUCCA_BRAIDS=1 -Ibuild/gen -Ifirmware/src -c tests/regress.c -o "$OUT/regress_braids.o"
-        "${CXX:-clang++}" -o "$OUT/regress_braids" "$OUT/regress_braids.o" $MIO -lm
-        run "regression, a FELUCCA_BRAIDS=1 build: Felucca's golden renders unchanged, BRAIDS's health, voices" \
-            "$OUT/regress_braids" tests/golden.txt tests/cpu_baseline.txt
-        $CC -O2 -w -DFELUCCA_BRAIDS=1 -pthread -Ibuild/gen -Ifirmware/src -c tests/dualcore_test.c -o "$OUT/dualcore_braids.o"
-        "${CXX:-clang++}" -pthread -o "$OUT/dualcore_braids" "$OUT/dualcore_braids.o" $MIO -lm
-        run "second core, a FELUCCA_BRAIDS=1 build: BRAIDS parts bit for bit on one core and on two, every split" \
-            "$OUT/dualcore_braids"
-        $CC -w -DFELUCCA_BRAIDS=1 -Ibuild/gen -Ifirmware/src -c tests/ui_test.c -o "$OUT/ui_test_braids.o"
-        "${CXX:-clang++}" -o "$OUT/ui_test_braids" "$OUT/ui_test_braids.o" $MIO -lm
-        run "UI, a FELUCCA_BRAIDS=1 build: the engines' order with BRAIDS, its presets' categories and favourites, the rest as Felucca's" \
-            "$OUT/ui_test_braids"
-        $CC -O1 -w -DFELUCCA_BRAIDS=1 "-DFELUCCA_VERSION=\"$FV\"" -Ibuild/gen -Ifirmware/src -Itests -c tests/ui_render.c \
-            -o "$OUT/ui_render_braids.o"
-        "${CXX:-clang++}" -o "$OUT/ui_render_braids" "$OUT/ui_render_braids.o" $MIO -lm
-        mkdir -p build/ui_braids/ppm build/ui_braids_slot
-        run "UI renders, a FELUCCA_BRAIDS=1 build: BRAIDS's pages and values in every palette, lint and alignment" \
-            "$OUT/ui_render_braids" build/ui_braids build/ui_braids_slot
+        $CC -O2 -w -DFELUCCA_RACK=1 -pthread -Ibuild/gen -Ifirmware/src -c tests/dualcore_test.c -o "$OUT/dualcore_rack.o"
+        "${CXX:-clang++}" -pthread -o "$OUT/dualcore_rack" "$OUT/dualcore_rack.o" $MIO -lm
+        run "second core, a FELUCCA_RACK=1 build: MACRO parts bit for bit on one core and on two, MODEL kept on the first" \
+            "$OUT/dualcore_rack"
+        $CC -O1 -w -DFELUCCA_RACK=1 "-DFELUCCA_VERSION=\"$FV\"" -Ibuild/gen -Ifirmware/src -Itests -c tests/ui_render.c \
+            -o "$OUT/ui_render_rack.o"
+        "${CXX:-clang++}" -o "$OUT/ui_render_rack" "$OUT/ui_render_rack.o" $MIO -lm
+        mkdir -p build/ui_rack/ppm build/ui_rack_slot
+        run "UI renders, a FELUCCA_RACK=1 build: every page and value of MACRO and MODEL, the rack's slots by type, GRAIN, lint and alignment" \
+            "$OUT/ui_render_rack" build/ui_rack build/ui_rack_slot
     else
-        echo "== FM1 Rack BRAIDS: skipped (needs clang++ and ext/eurorack: git submodule update --init --recursive ext/eurorack)"
+        echo "== FM1 Rack: skipped (needs clang++ and ext/eurorack: git submodule update --init --recursive ext/eurorack)"
     fi
     if [ -n "$TSAN" ]; then                     # TSAN=1: the same under ThreadSanitizer (~6 min): shared state
         TSAN_CC="cc -O1 -g -w -Ibuild/gen -Ifirmware/src -fsanitize=thread -pthread"

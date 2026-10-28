@@ -8,22 +8,24 @@ typedef struct {
 } favorites_t;
 static favorites_t favorites __attribute__((section(".pool")));
 /* a factory preset's favourite bit: engine e's row, preset k's bit. Rows 14 and 15 hold the MIDI LEARN map and settings
- * bytes (midi_learn.c, below), so FM1 Rack's BRAIDS (engine 14) keeps its bits in the second half of SLICE's row
+ * bytes (midi_learn.c, below), so FM1 Rack's MACRO (engine 14) keeps its bits in the second half of SLICE's row, MODEL (15) in FM6's
  * (bytes 16..31: SLICE's presets 128..255, which do not exist; saved with the settings as they are, and Felucca reads
  * them as nothing). 0: none (no row, or a preset past it) */
 #define FAV_ENGINES 14u                                  /* (midi_learn.c: no engine of its own in row 14) */
-#if defined(FELUCCA_BRAIDS) && FELUCCA_BRAIDS
-#define FAV_BRAIDS 1
+#if defined(FELUCCA_RACK) && FELUCCA_RACK
+#define FAV_RACK 1
 #else
-#define FAV_BRAIDS 0                                     /* (also a host test that includes this file alone) */
+#define FAV_RACK 0                                     /* (also a host test that includes this file alone) */
 #endif
 static uint8_t *fav_byte(uint32_t engine, uint32_t preset)
 {
-    if (engine < FAV_ENGINES && preset < (FAV_BRAIDS && engine == 13u ? 128u : 256u))
+    if (engine < FAV_ENGINES && preset < (FAV_RACK && engine >= 12u ? 128u : 256u))
         return &favorites.factory[engine][preset / 8u];
-#if FAV_BRAIDS
+#if FAV_RACK
     if (engine == 14u && preset < 128u)
         return &favorites.factory[13][16u + preset / 8u];
+    if (engine == 15u && preset < 128u)                /* MODEL: FM6's row's second half (its presets 128..255) */
+        return &favorites.factory[12][16u + preset / 8u];
 #endif
     return 0;
 }

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Grids (Mutable Instruments, Copyright 2012 Emilie Gillet, GPL-3.0): the drum map's 25 nodes, 3 instruments x 32 steps each,
  * from grids/resources.cc (node_0 .. node_24), and their places on the 5 x 5 map (grids/pattern_generator.cc
- * drum_map). Used by eng_braids.c (GRID). Generated once from FM1 Rack's engine/grids_nodes.cc. */
+ * drum_map). Used by rack_mod.c (TRIG1..3). Generated once from FM1 Rack's engine/grids_nodes.cc. */
 static const uint8_t GRIDS_NODE[25][96] = {
     {255, 0, 0, 0, 0, 0, 145, 0, 0, 0, 0, 0, 218, 0, 0, 0, 72, 0, 36, 0, 182, 0, 0, 0, 109, 0, 0, 0, 72, 0, 0, 0,
      36, 0, 109, 0, 0, 0, 8, 0, 255, 0, 0, 0, 0, 0, 72, 0, 0, 0, 182, 0, 0, 0, 36, 0, 218, 0, 0, 0, 145, 0, 0, 0,

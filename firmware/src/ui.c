@@ -1377,6 +1377,9 @@ static void apply_preset_to(track_t *t, uint32_t pi)
             t->p[P_DIST + i] = (int16_t)(pr->fx[i] ? pr->fx[i] - 1 : FX_DEF[i]);
     }
     fm6_track_loaded(t);                              /* FM6: the preset's patch (its SLOT) */
+#if FELUCCA_RACK
+    rack_preset(t, t->eng_req % NENGINES, pi);        /* FM1 Rack: its MOD A, MOD B and matrix slot */
+#endif
     load_end(t);
 }
 
@@ -1384,9 +1387,12 @@ static void apply_preset_to(track_t *t, uint32_t pi)
  * its values or the new one with its own (voice.c engine_block), never one with the other's */
 static void set_engine_of(track_t *t, uint32_t ei)
 {
+#if FELUCCA_RACK
+    ei = eng_idx(ei % NENGINES);                      /* FM1 Rack: a dropped engine (the editor's ENGINE) is MACRO */
+#endif
     const engine_t *e = ENGINES[ei % NENGINES];
     uint32_t i;
-#if !FELUCCA_FM4
+#if !FELUCCA_FM4 && !FELUCCA_RACK
     if (ei % NENGINES == ENGI_DIGITAL) {             /* DIGITAL (retired): its first preset, as FM6 */
         fm4_load_preset(t, 0);
         return;

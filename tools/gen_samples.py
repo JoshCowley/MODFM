@@ -63,6 +63,11 @@ SRC = Path(__file__).resolve().parents[1]
 GENDIR = SRC / "build" / "genwav"
 CACHE = SRC / "build" / "gen_samples.cache"
 CC0 = SRC / "assets" / "samples-cc0"
+# FM1 Rack (FELUCCA_NO_SAMPLES=1, tools/build.py with FELUCCA_RACK): no engine plays samples, so none are built (the
+# 126 KB of flash go to the rack's engines); the tables stay, empty, for the code that still names them
+NO_SAMPLES = os.environ.get("FELUCCA_NO_SAMPLES") == "1"
+if NO_SAMPLES:
+    CC0 = SRC / "assets" / "no-samples"
 TR = 22050                                   # stored sample rate
 
 # CC0 library: set -> kind ("oneshot" decaying, "sus" looped sustain, "kit" one sample per key)

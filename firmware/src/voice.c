@@ -408,6 +408,9 @@ static void trk_note_on(track_t *t, uint32_t note, uint32_t vel)
         return;
     }
     vel = mod_note(t, note, vel);                       /* the matrix's VEL / KEY / RAND (1.5.6: VEL as a destination) */
+#if FELUCCA_RACK
+    rack_mod_note(t, note);                             /* FM1 Rack: MOD A / B's SLOPE starts, XMOD's carrier note */
+#endif
     for (i = 0; i < NVOICE; i++)
         any |= t->v[i].gate;
     if (!any) {                                        /* fresh phrase: LFO retrigger (TRIG NOTE) and fade */

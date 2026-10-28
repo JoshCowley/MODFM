@@ -978,8 +978,14 @@ static int test_save(void)
 static void go_title(const char *title)
 {
     uint32_t i;
+#if FELUCCA_RACK
+    if (str_eq(title, "REVERB"))                   /* (FM1 Rack: GRAIN where the reverb was) */
+        title = "GRAIN";
+#endif
     for (i = 0; i < NPAGES && !str_eq(PAGES[i].title, title); i++)
         ;
+    if (i == NPAGES)                               /* (a page this build has not: the first) */
+        i = 0;
     ui.home = 0;
     ui.page = (uint8_t)i;
     page_entered();
@@ -5049,8 +5055,8 @@ static int test_fm4_retired(void)
     {   /* the display order (engines.c ENGINE_ORDER): every engine one can pick once; the PRESETS list follows it */
         static const char *const ORDER[] = {"ANALOG", "FM6", "PHASE", "LOFI", "SAMPLE", "VOICE", "TRIO", "WHEEL", "GRAIN",
                                             "PHYS",
-#if FELUCCA_BRAIDS
-                                            "BRAIDS",            /* (FM1 Rack) */
+#if FELUCCA_RACK
+                                            "MACRO", "MODEL",     /* (FM1 Rack: not run, ui_test is Felucca's) */
 #endif
                                             "NOISE", "SLICE", "DRUM"};
         uint32_t last = 0xFFu, r = 0, n = 0;

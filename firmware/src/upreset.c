@@ -478,6 +478,13 @@ static int up_load(uint32_t k)
         for (i = 0; i < P_COUNT; i++)
             if (!param_kept(i))
                 t->p[i] = v[i];
+#if FELUCCA_RACK
+        if (!eng_ok(r->engine)) {                       /* FM1 Rack: a sound of a dropped engine: MACRO's first */
+            t->eng_req = (uint8_t)eng_idx(r->engine);
+            for (i = 0; i < 8u; i++)
+                t->p[P_E0 + i] = ENGINES[t->eng_req]->presets[0].e[i];
+        }
+#endif
         t->preset = 0;
         fm1_irq_on();
         upf_track_load(t, k);                           /* FM6: the preset's own patch (up_fm6.c) */

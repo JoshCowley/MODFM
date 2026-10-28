@@ -56,12 +56,16 @@ VERSION = None                      # FELUCCA_VERSION for release builds (defaul
 # stacks (firmware/bsp/chip/fm1_cpu1.S) linked and its waiting loop (.c1_text) checked; MENU > SYSTEM > 2ND CORE starts it
 # (OFF by default: one core, as 1.6). FELUCCA_CPU2=0: none of it is built (1.6's one-core code and RAM)
 CPU2 = os.environ.get("FELUCCA_CPU2") != "0"
-# FM1 Rack: FELUCCA_BRAIDS, unset or 1, the default of this fork: the BRAIDS engine (firmware/src/eng_braids.c) and
-# the Mutable Instruments objects it calls (tools/mi_build.py), linked with the app. With it, unless set:
-# FELUCCA_UAC_48K=0 (USB audio at 44.1 kHz only: its 48 kHz filter's 8 KB of flash go to Braids) and the version
-# string v1.7.0-rack1. FELUCCA_BRAIDS=0: Felucca 1.7.0 as it was (the same image but for the build date)
-BRAIDS = os.environ.get("FELUCCA_BRAIDS") != "0"
-RACK_VERSION = "v1.7.0-rack1"
+# FM1 Rack: FELUCCA_RACK, unset or 1, the default of this fork: the rack build (firmware/src/core.h FELUCCA_RACK).
+# Felucca's engines and their samples are left out (FELUCCA_SLICE=0, FELUCCA_NO_SAMPLES=1 for tools/gen_samples.py),
+# the rack's engines (eng_macro.c, eng_model.c) and the Mutable Instruments objects they call (tools/mi_build.py) are
+# linked in; USB audio is 44.1 kHz only (FELUCCA_UAC_48K=0, unless set). FELUCCA_RACK=0: Felucca 1.7.0 as it was
+RACK = os.environ.get("FELUCCA_RACK") != "0"
+RACK_VERSION = "v1.7.0-rack2"
+LD_SCRIPT = FW / ("app_rack.ld" if RACK else "app.ld")   # (FM1 Rack: the RAM / POOL boundary moved, app_rack.ld)
+if RACK:
+    os.environ.setdefault("FELUCCA_SLICE", "0")
+    os.environ.setdefault("FELUCCA_NO_SAMPLES", "1")
 
 
 def toolchain():
@@ -201,7 +205,7 @@ def ld_regions():
     """firmware/app.ld's MEMORY regions: name -> (origin, length)"""
     regs = {}
     for m in re.finditer(r"^\s*(\w+)\s*\([rwx]+\)\s*:\s*ORIGIN\s*=\s*(\w+),\s*LENGTH\s*=\s*(\w+)",
-                         (FW / "app.ld").read_text(), re.M):
+                         LD_SCRIPT.read_text(), re.M):
         n = m.group(3)
         regs[m.group(1)] = (int(m.group(2), 0), int(n[:-1], 0) * 1024 if n.endswith("K") else int(n, 0))
     return regs
@@ -215,15 +219,15 @@ def build_app():
         v = os.environ.get(flag)    # unset: the default in firmware/src/felucca.c
         if v in ("0", "1"):
             flags.append(f"-D{flag}={v}")
-        elif flag == "FELUCCA_UAC_48K" and BRAIDS:
-            flags.append("-DFELUCCA_UAC_48K=0")    # FM1 Rack: its flash to BRAIDS (above)
-    if BRAIDS:
-        flags.append("-DFELUCCA_BRAIDS=1")
+        elif flag == "FELUCCA_UAC_48K" and RACK:
+            flags.append("-DFELUCCA_UAC_48K=0")    # FM1 Rack: its flash to the rack (above)
+    if RACK:
+        flags.append("-DFELUCCA_RACK=1")
     v = os.environ.get("FELUCCA_USB_LAYOUT")   # firmware/src/usb.c: how the USB composite presents itself (#67), 0..3
     if v in ("0", "1", "2", "3"):
         flags.append(f"-DFELUCCA_USB_LAYOUT={v}")
     flags.append(f'-DFELUCCA_ID="{PRODUCT}"')
-    if VERSION or BRAIDS:
+    if VERSION or RACK:
         flags.append(f'-DFELUCCA_VERSION="{VERSION or RACK_VERSION}"')
     # felucca.c goes to LLVM IR without the optimizer, the main-loop functions (UI, stores, editor) are
     # marked minsize (tools/size_fns.py), then the IR is compiled at -Os. FELUCCA_SIZE=0: -Os everywhere
@@ -243,11 +247,12 @@ def build_app():
         tc("cc", *[f for f in flags if not f.startswith(("-I", "-D", "-W"))], "-c",
            OUT / "felucca_size.ll", "-o", OUT / "felucca.o")
     mi_objs = []
-    if BRAIDS:                      # FM1 Rack: Braids and Peaks (C++), freestanding, for pi32v2
+    if RACK:                      # FM1 Rack: the Mutable objects (C++), freestanding, for pi32v2 (the float group for its FPU)
         mi_objs = [Path(o) for o in mi_build.build(lambda a: tc("cc", *a), lambda a: tc("common/bin/objdump", *a),
-                                                   OUT / "mi", freestanding=True, rel=True)]
+                                                   OUT / "mi", freestanding=True, rel=True,
+                                                   fpu=mi_build.FPU_FLAGS)]
     elf = OUT / "felucca.elf"
-    tc("pi32v2/bin/ld", "-T", FW / "app.ld", OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o",
+    tc("pi32v2/bin/ld", "-T", LD_SCRIPT, OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o",
        *([OUT / "fm1_cpu1.o"] if CPU2 else []), OUT / "felucca.o", *mi_objs, "-o", elf)
     for sect in ("text.bin", "data.bin", "ramtext.bin", "c1text.bin"):   # (c1text.bin: before the BSP, its own section)
         (OUT / sect).unlink(missing_ok=True)
@@ -334,8 +339,8 @@ def check(img, syms, dis, rt):
                 errors.append(f"reference to ROM address {val:#010x}")
     if len(img) > APP_SLOT:
         errors.append(f"image {len(img)} B exceeds the app slot ({APP_SLOT} B) by {len(img) - APP_SLOT} B" +
-                      (": FM1 Rack levers: FELUCCA_ICONS=0 (the parameter icons), or fewer Braids models "
-                       "(tools/mi_build.py SILENCED with eng_braids.c BRD_SHAPE)" if BRAIDS else ""))
+                      (": FM1 Rack levers: FELUCCA_ICONS=0 (the parameter icons), or fewer models silenced in "
+                       "tools/mi_build.py SILENCED (with eng_macro.c BRD_SHAPE / eng_model.c MDL_ENGINE)" if RACK else ""))
     else:
         notes.append(f"flash: {APP_SLOT - len(img)} B of the app slot free")
 

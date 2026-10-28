@@ -12,26 +12,42 @@
  * that runs on across notes and switches stays outside (WHEEL's wheels, GRAIN's random numbers).
  * Sized by the largest, PHYS (3 x SYMP's slot); an engine that needs more than ENG_MEM_PART grows it for
  * every part (x NPART of the pool). Zero-initialised pool section: main.c fm1_cstart clears it. */
+#if FELUCCA_RACK
+#define ENG_MEM_PART 16u        /* FM1 Rack: no engine of the table keeps state here (MACRO and MODEL have their own); the
+                                 * dropped engines' accessors that still compile are reached only by a track of theirs,
+                                 * which none is (eng_idx) */
+#else
 #define ENG_MEM_PART 12888u
+#endif
 static union {
     uint64_t align;
     uint8_t b[ENG_MEM_PART];
 } eng_mem[NPART] __attribute__((section(".pool")));
 static uint8_t eng_mem_owner[NPART];       /* engine index + 1 whose state is in the region, 0 = none (zeros) */
 #define ENG_MEM(p) ((void *)eng_mem[p].b)  /* part p's region (p < NPART) */
+#if FELUCCA_RACK
+#define ENG_MEM_FITS(name, size) _Static_assert((size) > 0, name)
+#else
 #define ENG_MEM_FITS(name, size) _Static_assert((size) <= ENG_MEM_PART, name " state over ENG_MEM_PART")
+#endif
 
+#if !FELUCCA_RACK
 #include "../engines/src/eng_analog.c"   /* Felucca-Engines (MIT): ANALOG LOFI TRIO WHEEL NOISE */
 #include "../engines/src/eng_phase.c"   /* Felucca-Engines (MIT): PHASE */
 #include "../engines/src/eng_lofi.c"
+#endif
 #include "eng_sample.c"
+#if !FELUCCA_RACK
 #include "eng_formant.c"
 #include "../engines/src/eng_trio.c"
 #include "../engines/src/eng_wheel.c"
 #include "eng_grain.c"
+#endif
 #include "eng_phys.c"           /* PHYS: DaisySP physical models (phys_dsp.c, MIT) */
 #include "eng_drum.c"           /* DRUM: the 8-lane kit (drum_voice.c) */
+#if !FELUCCA_RACK
 #include "../engines/src/eng_noise.c"
+#endif
 #include "eng_fm6.c"            /* FM6: 6-operator FM, msfa ported (fm6_core.c, Apache-2.0) */
 #include "fm4_convert.c"        /* DIGITAL's tables, and its sounds -> FM6 */
 #if FELUCCA_FM4
@@ -40,11 +56,64 @@ static uint8_t eng_mem_owner[NPART];       /* engine index + 1 whose state is in
 #if FELUCCA_SLICE
 #include "eng_slice.c"
 #endif
-#if FELUCCA_BRAIDS
-#include "eng_braids.c"         /* FM1 Rack: BRAIDS (Braids, Peaks, Grids: mi/mi_glue.cc) */
+#if FELUCCA_RACK
+#include "eng_macro.c"          /* FM1 Rack: MACRO (Mutable Instruments' Braids: mi/mi_glue.cc) */
+#include "eng_model.c"          /* FM1 Rack: MODEL (Mutable Instruments' Plaits: mi/mi_glue_fp.cc) */
 #endif
 
 /* the editor protocol, user presets and projects store these indices: append, never reorder */
+#if FELUCCA_RACK
+/* FM1 Rack: Felucca's engines are dropped. Their numbers stay (projects, user presets and the editor store them),
+ * each slot MACRO's table entry, never offered: a stored track of one loads as MACRO (eng_idx). The DRUM, FM6,
+ * SAMPLE and PHYS sources are still compiled for the helpers the platform code calls (the editor's bank, the stores'
+ * conversions); no track ever plays them, so their renders are never linked */
+#define ENG_RACK_GONE (&ENG_MACRO)       /* (a stray number anywhere plays and shows as MACRO: no empty table entry) */
+static const engine_t *const ENGINES[NENGINES] = {
+    ENG_RACK_GONE, ENG_RACK_GONE, ENG_RACK_GONE, ENG_RACK_GONE, ENG_RACK_GONE, ENG_RACK_GONE, ENG_RACK_GONE,
+    ENG_RACK_GONE, ENG_RACK_GONE, ENG_RACK_GONE, ENG_RACK_GONE, ENG_RACK_GONE, ENG_RACK_GONE, ENG_RACK_GONE,
+    &ENG_MACRO,                  /* 14 (ENGI_MACRO) */
+    &ENG_MODEL,                  /* 15 (ENGI_MODEL) */
+};
+/* a track's engine number as an index: a dropped or bad number plays MACRO */
+static inline uint32_t eng_idx(uint32_t e) { return e == ENGI_MODEL ? ENGI_MODEL : ENGI_MACRO; }
+/* the dropped engines' names the platform's UI still compares against: none of them is ever a track's */
+#define ENG_ANALOG ENG_FM4_GONE                  /* (ui.c's FILTER page: ANALOG's, never shown) */
+#define ENG_WHEEL ENG_FM4_GONE                   /* (ui_graph.c: WHEEL's drawbars) */
+static const char *const N_TRIO_MODE[1], *const N_NOISE_MODE[1];   /* (icons.c: lists no value ever names) */
+static const param_desc_t NOISE_CLK;
+static int32_t drw_level(const int16_t *p, uint32_t k) { (void)p; (void)k; return 0; }   /* (ui_graph.c: WHEEL's bars) */
+/* a TRIG hit of part t's MOD A / B (rack_mod.c): its sounding voices struck */
+static void rack_strike(track_t *t)
+{
+    uint32_t e = eng_idx(t->eng_req);
+    if (e == ENGI_MACRO)
+        brd_strike(t);
+    else if (e == ENGI_MODEL)
+        mdl_strike(t);
+}
+/* a rack engine's preset pi on track t: the MOD A, MOD B and matrix slot 1 its row sets (after the sound: ui.c
+ * apply_preset_to has put the rest of the track to its defaults) */
+static void rack_preset(track_t *t, uint32_t e, uint32_t pi)
+{
+    const int8_t *r;
+    uint32_t i;
+    if (e == ENGI_MACRO && pi < NELEM(MACRO_RACK))
+        r = MACRO_RACK[pi];
+    else if (e == ENGI_MODEL && pi < NELEM(MODEL_RACK))
+        r = MODEL_RACK[pi];
+    else
+        return;
+    for (i = 0; i < 5u; i++) {
+        t->p[P_MATYP + i] = r[i];
+        t->p[P_MBTYP + i] = r[5 + i];
+    }
+    if (r[10]) {
+        t->p[P_M1SRC] = r[10];
+        t->p[P_M1DST] = r[11];
+        t->p[P_M1AMT] = r[12];
+    }
+}
+#else
 static const engine_t *const ENGINES[NENGINES] = {
     &ENG_ANALOG,                 /* 0 */
 #if FELUCCA_FM4
@@ -66,13 +135,11 @@ static const engine_t *const ENGINES[NENGINES] = {
 #if FELUCCA_SLICE
     &ENG_SLICE,                  /* 13 (FELUCCA_SLICE=0 builds without it) */
 #endif
-#if FELUCCA_BRAIDS
-    &ENG_BRAIDS,                 /* 14 (FM1 Rack) */
-#endif
 };
 
 /* a track's engine number as an index (the audio paths: a compare, cheaper than % NENGINES; a bad number: 0) */
 static inline uint32_t eng_idx(uint32_t e) { return e < NENGINES ? e : 0u; }
+#endif
 
 /* part t's engine memory goes to its engine (t->engine; voice.c engine_block, once a block: on a switch, after
  * the old engine's fade, before any note on the new one): zeroed (its engine_t.mem bytes) when another
@@ -108,15 +175,28 @@ static const char *snd_missing(const track_t *t, uint32_t *code)
         return slc_get(si) ? 0 : N_SLC_SRC[si];
     }
 #endif
+#if FELUCCA_RACK
+    (void)si;
+    (void)e;
+    return 0;                                    /* (FM1 Rack: no engine plays samples) */
+#else
     if (e != &ENG_SAMPLE && e != &ENG_GRAIN)
         return 0;
     *code = (e == &ENG_GRAIN ? 32u : 1u) + si % 32u;
     return smp_set_missing(si) ? SMP_ALL_NAMES[si] : 0;
+#endif
 }
 
 /* the order the engines are shown in (PRESETS browsing and its ENG knob, the EDIT layer's keys, the editor's list):
  * engine indices, never DIGITAL's reserved 1 (with FELUCCA_FM4 it follows FM6). The indices stay as they are (the
  * stores and the protocol hold them); only this table orders them */
+#if FELUCCA_RACK
+static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {ENGI_MACRO,
+#if NENG_SHOWN > 1
+                                                 ENGI_MODEL
+#endif
+};
+#else
 static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
     0,                           /* ANALOG */
     12,                          /* FM6 */
@@ -124,19 +204,21 @@ static const uint8_t ENGINE_ORDER[NENG_SHOWN] = {
     1,                           /* DIGITAL */
 #endif
     2, 3, 4, 5, 6, 7, 8, 9,      /* PHASE LOFI SAMPLE VOICE TRIO WHEEL GRAIN PHYS */
-#if FELUCCA_BRAIDS
-    14,                          /* BRAIDS (FM1 Rack) */
-#endif
     11,                          /* NOISE */
 #if FELUCCA_SLICE
     13,                          /* SLICE */
 #endif
     10,                          /* DRUM */
 };
+#endif
 
 /* the engines one can pick (engine 1 only with FELUCCA_FM4), in ENGINE_ORDER: eng_ok(e), the n-th of them
  * eng_vis(n), e's place among them eng_rank(e), the next / previous one eng_step(e, dir) (wraps) */
+#if FELUCCA_RACK
+static int eng_ok(uint32_t e) { return e == ENGI_MACRO || e == ENGI_MODEL; }
+#else
 static int eng_ok(uint32_t e) { return e < NENGINES && (FELUCCA_FM4 || e != ENGI_DIGITAL); }
+#endif
 static uint32_t eng_vis(uint32_t n) { return ENGINE_ORDER[n % NENG_SHOWN]; }
 static uint32_t eng_rank(uint32_t e)
 {
@@ -196,6 +278,11 @@ static const struct {
 #define NPATTERNS (sizeof PATTERNS / sizeof PATTERNS[0])
 
 /* the parts at power-on (engine, preset, PATTERNS[n - 1] in the sequencer, 0 = empty: all are): bass, pad, lead, drums */
+#if FELUCCA_RACK
+static const uint8_t TRK_DEF[NPART][3] = {{ENGI_MACRO, 4, 0}, {ENGI_MACRO, 5, 0}, {ENGI_MACRO, 1, 0},
+                                          {ENGI_MACRO, 6, 0}};   /* FM1 Rack: MACRO FM BASS, SWARM, PLUCK, TRIG DRUM */
+#else
 static const uint8_t TRK_DEF[NPART][3] = {{0, 4, 0}, {ENGI_FM6, 4, 0}, {3, 0, 0}, {ENGI_DRUM, 0, 0}}; /* ANALOG ACID,
                                                                        * FM6 PAD (was DIGITAL PAD), LOFI PULSE LD, DRUM KIT */
+#endif
 static uint32_t trk_def_engine(uint32_t i) { return TRK_DEF[i % NPART][0]; }

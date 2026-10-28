@@ -24,8 +24,17 @@ static const struct { const char *title, *hint; } HELP_PAGE[] = {
     {"SLICER", "[K1]ON[K2]PATTERN[FX]INSERT"},
     {"INSERT", "[K1]TYPE[FX]DRY / WET"},
     {"INSERT 2", "[K1]DRY / WET[FX]DLY"},
+#if FELUCCA_RACK
+    {"DLY", "[K1-4]ALL TRACKS[FX]GRAIN"},
+    {"GRAIN", "[K1]GRAN STRCH LOOP FRZ[FX]GRAIN 2"},
+    {"GRAIN 2", "[K1-4]ALL TRACKS[FX]CHORUS"},
+    {"RACK", "[K1]MOD A[K2]MOD B[K3]INSERT"},
+    {"MOD A", "[K1-4]BY ITS TYPE[EDIT]MOD B"},
+    {"MOD B", "[K1-4]BY ITS TYPE[EDIT]VOICE"},
+#else
     {"DLY", "[K1-4]ALL TRACKS[FX]REVERB"},
     {"REVERB", "[K1]ROOM SPRING HALL[FX]CHORUS"},
+#endif
     {"CHORUS", "[K1-4]ALL TRACKS[FX]FX"},
     {"SCL", "[K2]SCALE[K3]QUANTIZE[SCL]CHORDS"},
     {"CHORD", "[K1]CHORD[KEYS]ONE FINGER[SCL]SCL"},

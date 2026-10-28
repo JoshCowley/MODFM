@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #pragma once
+#ifndef __cplusplus
 static inline int abs(int x) { return x < 0 ? -x : x; }
+#else
+#include "math.h"
 namespace std { using ::abs; }
+#endif

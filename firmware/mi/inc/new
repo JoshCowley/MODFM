@@ -1,0 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// FM1 Rack: placement new (no heap): the glue builds the Mutable objects in the pool's raw storage
+#pragma once
+#include <stddef.h>
+inline void* operator new(size_t, void* p) throw() { return p; }
+inline void* operator new[](size_t, void* p) throw() { return p; }

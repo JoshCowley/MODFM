@@ -1338,8 +1338,8 @@ static void click_tick(uint32_t adv)
 /* the beat of the bar the click is on (0..3: 0 the accented first), -1 stopped: the count-in's, else the playing
  * transport's (clk_step, internal or external clock). It moves in the block a beat clicks in (the header's metronome,
  * ui_draw.c, swings on it; CLICK OFF it moves all the same) */
-/* FM1 Rack: the transport's 1/16 count since it started (internal or external clock), -1 while stopped: the BRAIDS
- * engine's GRID modulator steps through Grids' 32 steps on it (eng_braids.c) */
+/* FM1 Rack: the transport's 1/16 count since it started (internal or external clock), -1 while stopped: the rack
+ * modulators' TRIG1..3 step through Grids' 32 steps on it (rack_mod.c) */
 static __attribute__((unused)) int32_t seq_clock16(void)
 {
     if (!song.playing || clk_pos == CLK_START)

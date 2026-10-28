@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #pragma once
 /* the part of <algorithm> the Mutable modules use */
+template <typename T> struct __remove_ref { typedef T type; };
+template <typename T> struct __remove_ref<T &> { typedef T type; };
 namespace std {
 template <typename T> inline const T &min(const T &a, const T &b) { return b < a ? b : a; }
 template <typename T> inline const T &max(const T &a, const T &b) { return a < b ? b : a; }
@@ -12,5 +14,31 @@ template <typename I, typename T> inline I lower_bound(I first, I last, const T 
     long n = last - first;
     while (n > 0) { long h = n / 2; I m = first + h; if (*m < v) { first = m + 1; n -= h + 1; } else n = h; }
     return first;
+}
+template <typename I> inline void sort(I first, I last)
+{
+    for (I i = first; i != last; ++i)             /* insertion sort: the modules sort a few notes */
+        for (I j = i; j != first && *j < *(j - 1); --j) {
+            typename __remove_ref<decltype(*j)>::type t = *j;
+            *j = *(j - 1);
+            *(j - 1) = t;
+        }
+}
+template <typename T> inline T clamp(T x, T lo, T hi) { return x < lo ? lo : hi < x ? hi : x; }
+template <typename I> inline I max_element(I first, I last)
+{
+    I best = first;
+    for (; first != last; ++first)
+        if (*best < *first)
+            best = first;
+    return best;
+}
+template <typename I> inline I min_element(I first, I last)
+{
+    I best = first;
+    for (; first != last; ++first)
+        if (*first < *best)
+            best = first;
+    return best;
 }
 }

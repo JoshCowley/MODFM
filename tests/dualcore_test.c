@@ -59,6 +59,7 @@ static uint64_t render(const scen_t *sc, int dual, const char *mask)
     int32_t o[2 * CTL];
     host_tracks_init();
     c1h_off = !dual;
+    c1h_parts = 0;                                  /* (the parent's last reading came with the fork) */
     if (mask)
         setenv("C1_MASK", mask, 1);
     for (k = 0; k < NPART; k++) {
@@ -105,13 +106,14 @@ static uint64_t render_fork(const scen_t *sc, int dual, const char *mask, uint32
     if (!pid) {
         h = render(sc, dual, mask);
         if (write(fd[1], &h, sizeof h) != sizeof h || write(fd[1], peak, sizeof peak) != sizeof peak ||
-            write(fd[1], &c1h_taken, sizeof c1h_taken) != sizeof c1h_taken)
+            write(fd[1], &c1h_taken, sizeof c1h_taken) != sizeof c1h_taken ||
+            write(fd[1], &c1h_parts, sizeof c1h_parts) != sizeof c1h_parts)
             _exit(2);
         _exit(0);
     }
     close(fd[1]);
     if (read(fd[0], &h, sizeof h) != sizeof h || read(fd[0], peak, sizeof peak) != sizeof peak ||
-        read(fd[0], taken, sizeof *taken) != sizeof *taken)
+        read(fd[0], taken, sizeof *taken) != sizeof *taken || read(fd[0], &c1h_parts, sizeof c1h_parts) != sizeof c1h_parts)
         h = 0;
     close(fd[0]);
     waitpid(pid, 0, 0);
@@ -137,11 +139,18 @@ int main(void)
             sc[n++].morph = 0;
         }
     }
+#if FELUCCA_RACK
+    /* FM1 Rack: MODEL parts stay on the first core (fx.c rack_core0): the others split around them */
+    sc[n++] = (scen_t){"MODEL MACRO MODEL MACRO", {ENGI_MODEL, ENGI_MACRO, ENGI_MODEL, ENGI_MACRO}, {0, 1, 3, 5}, 0};
+    sc[n++] = (scen_t){"MACRO MACRO MACRO MODEL", {ENGI_MACRO, ENGI_MACRO, ENGI_MACRO, ENGI_MODEL}, {2, 4, 6, 1}, 0};
+#else
     sc[n++] = (scen_t){"PHYS FM6 ANALOG DRUM", {ENGI_PHYS, ENGI_FM6, 0, ENGI_DRUM}, {1, 4, 7, 0}, 0};
     sc[n++] = (scen_t){"GRAIN NOISE VOICE LOFI", {8, 11, 5, 3}, {1, 4, 7, 10}, 0};
     sc[n++] = (scen_t){"TRIO WHEEL PHASE FM6", {6, 7, 2, ENGI_FM6}, {1, 4, 7, 10}, 0};
     sc[n++] = (scen_t){"PHYS morph + DRUM GRAIN ANALOG", {ENGI_PHYS, ENGI_DRUM, 8, 0}, {2, 1, 3, 5}, 1};
-#if FELUCCA_SLICE
+#endif
+#if FELUCCA_RACK
+#elif FELUCCA_SLICE
     sc[n++] = (scen_t){"SAMPLE SLICE GRAIN PHASE", {ENGI_SAMPLE, 13, 8, 2}, {2, 1, 3, 5}, 0};
     sc[n++] = (scen_t){"SLICE FM6 SAMPLE DRUM", {13, ENGI_FM6, ENGI_SAMPLE, ENGI_DRUM}, {0, 2, 3, 4}, 0};
 #else
@@ -149,7 +158,11 @@ int main(void)
 #endif
     for (i = 0; i < n; i++) {
         uint64_t ref;
-        uint32_t m, bad = 0, quiet = 0, taken = 0, took = 0;
+        uint32_t m, bad = 0, quiet = 0, taken = 0, took = 0, c0 = 0, parts = 0;
+#if FELUCCA_RACK
+        for (k = 0; k < NPART; k++)                     /* the parts the first core keeps (fx.c rack_core0) */
+            c0 |= (uint32_t)(sc[i].eng[k] == ENGI_MODEL) << k;
+#endif
         if (getenv("SCENE") && !strstr(sc[i].name, getenv("SCENE")))
             continue;
         ref = render_fork(&sc[i], 0, 0, &taken);
@@ -164,17 +177,24 @@ int main(void)
         for (m = 0; m < sizeof MASKS / sizeof MASKS[0]; m++) {
             uint64_t h = render_fork(&sc[i], 1, MASKS[m], &taken);
             took += taken != 0;
+            parts |= c1h_parts;
             if (h != ref || !h) {
                 printf("dualcore: %-34s split %-4s FAIL (%016llx, one core %016llx)\n", sc[i].name, MASKS[m],
                        (unsigned long long)h, (unsigned long long)ref);
                 bad++;
             }
         }
-        if (took < 2u) {                                /* the thread must have rendered parts (auto may hand none) */
+        if (parts & c0) {                               /* FM1 Rack: a first-core-only part went to the second */
+            printf("dualcore: %-34s the second core took a MODEL part (parts %x)   FAIL\n", sc[i].name, parts);
+            bad++;
+        }
+        if (took < 2u && c0 != (1u << NPART) - 1u) {    /* the thread must have rendered parts (auto may hand none) */
             printf("dualcore: %-34s the second core never took parts   FAIL\n", sc[i].name);
             bad++;
         }
-        if (!bad)
+        if (!bad && c0 == (1u << NPART) - 1u)
+            printf("dualcore: %-34s all on the first core, as one core   ok\n", sc[i].name);
+        else if (!bad)
             printf("dualcore: %-34s the same on two cores, every split   ok\n", sc[i].name);
         fail += bad != 0;
     }
